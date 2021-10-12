@@ -7,6 +7,7 @@ use std::vec::Vec;
 
 mod lexer;
 mod parser;
+mod stringiter;
 
 fn compile() -> std::io::Result<object::write::Object> {
     let mut object = Object::new(BinaryFormat::Elf, Architecture::X86_64, Endianness::Little);
@@ -127,7 +128,7 @@ fn main() -> std::io::Result<()> {
     let object = compile()?;
     let object_name = write(object)?;
     dump(&object_name)?;
-    let driver = compile_c("test.c")?;
+    let driver = compile_c("driver/test.c")?;
     let output = link(&[&object_name, &driver])?;
     run(&output[..])?;
 
