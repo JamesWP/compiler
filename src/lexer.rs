@@ -25,19 +25,6 @@ pub struct Location {
     end: Pos,
 }
 
-/*
-    "reserved:int"
-    "identifier:foo"
-    "paren:("
-    "reserved:int"
-    "identifier:a"
-    "paren:)"
-    "paren:{"
-    "reserved:return"
-    "value:0"
-    "semicolon:;"
-    "paren:}"
-*/
 #[derive(Debug, Clone, PartialEq)]
 pub enum ResWord {
     Return,
