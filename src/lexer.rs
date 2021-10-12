@@ -1,21 +1,10 @@
 use std::convert::TryInto;
 
-use crate::stringiter::StringIter;
-
-pub trait CharPeekIt: Iterator<Item = char> {
-    fn peek(&mut self) -> Option<char>;
-}
+use crate::stringiter::{CharPeekIt, Pos, StringIter};
 
 pub struct Lexer {
     source: Box<dyn CharPeekIt>,
     filename: String,
-    pos: Pos,
-}
-
-#[derive(Clone, Debug)]
-pub struct Pos {
-    line: u32,
-    col: u32,
 }
 
 #[derive(Debug)]
@@ -42,28 +31,10 @@ pub enum Token {
 
 impl Lexer {
     pub fn new_from_string(content: String) -> Lexer {
-        let chars = Box::new(StringIter::new(content));
         Lexer {
-            source: chars,
+            source: Box::new(StringIter::new(content)),
             filename: "raw_input_from_string.txt".to_owned(),
-            pos: Pos::default(),
         }
-    }
-}
-
-impl Pos {
-    pub fn new(line: u32, col: u32) -> Pos {
-        Pos { line, col }
-    }
-
-    pub fn advance(&mut self) {
-        self.col += 1;
-    }
-}
-
-impl Default for Pos {
-    fn default() -> Pos {
-        Pos::new(0, 0)
     }
 }
 
@@ -80,59 +51,11 @@ impl Location {
 pub type Lex = (Location, Token);
 
 impl Lexer {
-    fn is_whitespace(c: char) -> bool {
-        match c {
-            ' ' | '\t' | '\r' | '\n' => true,
-            _ => false,
-        }
-    }
-
-    fn is_alpha(c: char) -> bool {
-        match c {
-            'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K' | 'L' | 'M' | 'N'
-            | 'O' | 'P' | 'Q' | 'R' | 'S' | 'T' | 'U' | 'V' | 'W' | 'X' | 'Y' | 'Z' => true,
-            'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'g' | 'h' | 'i' | 'j' | 'k' | 'l' | 'm' | 'n'
-            | 'o' | 'p' | 'q' | 'r' | 's' | 't' | 'u' | 'v' | 'w' | 'x' | 'y' | 'z' => true,
-            _ => false,
-        }
-    }
-
-    fn is_num(c: char) -> bool {
-        match c {
-            '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' => true,
-            _ => false,
-        }
-    }
-
     fn is_ident(c: char) -> bool {
-        if Self::is_whitespace(c) {
-            return false;
-        }
-        if Self::is_alpha(c) || Self::is_num(c) {
+        if c.is_alphanumeric() || c == '_' {
             return true;
         }
-        match c {
-            '_' => true,
-            _ => false,
-        }
-    }
-
-    fn next_character(&mut self, ignore_whitespace: bool) -> Option<char> {
-        while let Some(c) = self.source.next() {
-            self.pos.advance();
-            if Lexer::is_whitespace(c) && ignore_whitespace {
-                continue;
-            }
-            return Some(c);
-        }
-
-        None
-    }
-    fn peek(&mut self) -> Option<char> {
-        if let Some(c) = self.source.peek() {
-            return Some(c);
-        }
-        None
+        false
     }
 }
 
@@ -140,8 +63,11 @@ impl Iterator for Lexer {
     type Item = Lex;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let start = self.pos.clone();
-        let char = self.next_character(true)?;
+        let start = self.source.pos();
+        while self.source.peek().is_some() && self.source.peek().unwrap().is_whitespace() {
+            self.source.next();
+        }
+        let char = self.source.next()?;
 
         let token = match &char {
             '{' | '}' | '(' | ')' => Token::Paren(char),
@@ -150,12 +76,12 @@ impl Iterator for Lexer {
                 let mut chars = String::new();
                 chars.push(char);
 
-                while let Some(char) = self.peek() {
-                    if !Lexer::is_num(char) {
+                while let Some(char) = self.source.peek() {
+                    if !char.is_numeric() {
                         break;
                     }
                     chars.push(char);
-                    self.next_character(false);
+                    self.source.next();
                 }
 
                 let value = chars.parse::<i64>();
@@ -171,15 +97,12 @@ impl Iterator for Lexer {
                 let mut chars = String::new();
                 chars.push(char);
 
-                while let Some(char) = self.peek() {
-                    if Lexer::is_whitespace(char) {
-                        break;
-                    }
+                while let Some(char) = self.source.peek() {
                     if !Lexer::is_ident(char) {
                         break;
                     }
                     chars.push(char);
-                    self.next_character(false);
+                    self.source.next();
                 }
                 if chars == "int" {
                     Token::Reserved(ResWord::Int)
@@ -191,7 +114,7 @@ impl Iterator for Lexer {
             }
         };
 
-        let location = Location::new(&self.filename, &start, &self.pos);
+        let location = Location::new(&self.filename, &start, &self.source.pos());
 
         return Some((location, token));
     }
