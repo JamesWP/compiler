@@ -1,18 +1,21 @@
 use object::write::{Object, SectionId, StandardSection, Symbol, SymbolSection};
 use object::{Architecture, BinaryFormat, Endianness, SymbolFlags, SymbolKind, SymbolScope};
-use std::fmt::Debug;
 use std::fs::File;
 use std::io::{prelude::*, ErrorKind};
 use std::process::Command;
 use std::vec::Vec;
 
-fn compile() -> std::result::Result<object::write::Object, &'static str> {
-    let mut o = Object::new(BinaryFormat::Elf, Architecture::X86_64, Endianness::Little);
+mod lexer;
+mod parser;
+
+fn compile() -> std::io::Result<object::write::Object> {
+    let mut object = Object::new(BinaryFormat::Elf, Architecture::X86_64, Endianness::Little);
 
     let my_data_bytes = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
-    let data_section_id = o.section_id(StandardSection::Data);
+    let data_section_id = object.section_id(StandardSection::Data);
 
-    let position = o.append_section_data(data_section_id, &my_data_bytes[..], 1 /*allign*/);
+    let position =
+        object.append_section_data(data_section_id, &my_data_bytes[..], 1 /*allign*/);
 
     let s_start = Symbol {
         name: Vec::from("my_data_bytes_start"),
@@ -25,7 +28,7 @@ fn compile() -> std::result::Result<object::write::Object, &'static str> {
         flags: SymbolFlags::<SectionId>::None,
     };
 
-    o.add_symbol(s_start);
+    object.add_symbol(s_start);
 
     let s_end = Symbol {
         name: Vec::from("my_data_bytes_end"),
@@ -38,9 +41,22 @@ fn compile() -> std::result::Result<object::write::Object, &'static str> {
         flags: SymbolFlags::<SectionId>::None,
     };
 
-    o.add_symbol(s_end);
+    object.add_symbol(s_end);
 
-    Ok(o)
+    Ok(object)
+}
+
+fn write(object: object::write::Object) -> std::io::Result<String> {
+    let name = "code.o";
+    let bytes = object.write().unwrap();
+
+    let mut file = File::create(name)?;
+
+    file.write_all(&bytes[..])?;
+
+    println!("Written {}", name);
+
+    Ok(name.to_owned())
 }
 
 fn link(objects: &[&str]) -> std::io::Result<String> {
@@ -82,35 +98,38 @@ fn run(name: &str) -> std::io::Result<()> {
         return Err(std::io::Error::from(ErrorKind::InvalidData));
     }
 
+    println!("Success from running {}", name);
+
     Ok(())
+}
+
+fn compile_c(file: &str) -> std::io::Result<String> {
+    let mut output = Command::new("gcc")
+        .arg("-c")
+        .args(["-o", "test.o"])
+        .arg(file)
+        .spawn()?;
+
+    let exit_code = output.wait()?;
+
+    if !exit_code.success() {
+        return Err(std::io::Error::from(ErrorKind::InvalidData));
+    }
+
+    println!("Compued driver {}", file);
+
+    Ok("test.o".to_owned())
 }
 
 fn main() -> std::io::Result<()> {
     println!("Hello, world!");
 
-    let o = compile();
-
-    let o = o.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-
-    let bytes = o.write().unwrap();
-
-    let mut file = File::create("code.o")?;
-
-    file.write_all(&bytes[..])?;
-
-    println!("Written {} bytes.", bytes.len());
-
-    dump("code.o")?;
-
-    println!("Linking");
-
-    let output = link(&["code.o", "test.o"])?;
-
-    println!("Linked into {}", output);
-
+    let object = compile()?;
+    let object_name = write(object)?;
+    dump(&object_name)?;
+    let driver = compile_c("test.c")?;
+    let output = link(&[&object_name, &driver])?;
     run(&output[..])?;
-
-    println!("Success from running {}", output);
 
     Ok(())
 }
