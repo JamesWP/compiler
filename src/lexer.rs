@@ -1,5 +1,3 @@
-use std::convert::TryInto;
-
 use crate::stringiter::{CharPeekIt, Pos, StringIter};
 
 pub struct Lexer {
@@ -21,7 +19,7 @@ pub enum ResWord {
 }
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
-    StringLiteral(String),
+    //StringLiteral(String),
     Reserved(ResWord),
     Identifier(String),
     Paren(char),
