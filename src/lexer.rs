@@ -57,59 +57,54 @@ impl Lexer {
         }
         false
     }
+
+    fn read_token(&mut self, c: char, fun: fn(char) -> bool) -> String {
+        let mut chars = String::new();
+        chars.push(c);
+
+        while let Some(c) = self.source.peek() {
+            if !fun(c) {
+                break;
+            }
+            chars.push(c);
+            self.source.next();
+        }
+
+        chars
+    }
 }
 
 impl Iterator for Lexer {
     type Item = Lex;
 
     fn next(&mut self) -> Option<Self::Item> {
+        self.read_token('0', |c| c.is_whitespace());
+
         let start = self.source.pos();
-        while self.source.peek().is_some() && self.source.peek().unwrap().is_whitespace() {
-            self.source.next();
-        }
         let char = self.source.next()?;
 
         let token = match &char {
             '{' | '}' | '(' | ')' => Token::Paren(char),
             ';' => Token::Semicolon,
             '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' => {
-                let mut chars = String::new();
-                chars.push(char);
-
-                while let Some(char) = self.source.peek() {
-                    if !char.is_numeric() {
-                        break;
-                    }
-                    chars.push(char);
-                    self.source.next();
-                }
-
-                let value = chars.parse::<i64>();
+                let token = self.read_token(char, |c| c.is_numeric());
+                let value = token.parse::<i64>();
 
                 if let Ok(value) = value {
                     Token::Value(value)
                 } else {
-                    eprintln!("Unable to lex Value token from {}", chars);
+                    eprintln!("Unable to lex Value token from {}", token);
                     return None;
                 }
             }
             _ => {
-                let mut chars = String::new();
-                chars.push(char);
-
-                while let Some(char) = self.source.peek() {
-                    if !Lexer::is_ident(char) {
-                        break;
-                    }
-                    chars.push(char);
-                    self.source.next();
-                }
-                if chars == "int" {
+                let token = self.read_token(char, |c| Lexer::is_ident(c));
+                if token == "int" {
                     Token::Reserved(ResWord::Int)
-                } else if chars == "return" {
+                } else if token == "return" {
                     Token::Reserved(ResWord::Return)
                 } else {
-                    Token::Identifier(chars)
+                    Token::Identifier(token)
                 }
             }
         };
@@ -130,13 +125,14 @@ fn char() {
 
 #[test]
 fn test_lexer() {
-    let mut lexer = Lexer::new_from_string("Hello World".to_owned());
+    let lexer = Lexer::new_from_string("Hello World".to_owned());
 
     let tokens: Vec<_> = lexer.collect();
 
-    assert_eq!(tokens.len(), 6);
+    assert_eq!(tokens.len(), 2);
 
-    assert_eq!(tokens[0].1, Token::StringLiteral("He".to_owned()));
+    assert_eq!(tokens[0].1, Token::Identifier("Hello".to_owned()));
+    assert_eq!(tokens[1].1, Token::Identifier("World".to_owned()));
 }
 
 #[test]
@@ -150,13 +146,13 @@ fn test_simple() -> std::io::Result<()> {
     let content = String::from_utf8(buf)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?;
 
-    let mut lexer = Lexer::new_from_string(content);
+    let lexer = Lexer::new_from_string(content);
 
     let tokens: Vec<_> = lexer.collect();
 
     for token in &tokens {
         println!("Token: {:?}", token.1);
-        println!("    -: {:?}", token.0);
+        println!("    -: {:?} - {:?}", token.0.start, token.0.end);
     }
 
     let tokens: Vec<_> = tokens.iter().map(|(_, t)| t).cloned().collect();
