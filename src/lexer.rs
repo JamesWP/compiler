@@ -84,7 +84,7 @@ impl Iterator for Lexer {
         let token = match &char {
             '{' | '}' | '(' | ')' => Token::Paren(char),
             ';' => Token::Semicolon,
-            '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' => {
+            '0' ..= '9' => {
                 let token = self.read_token(char, |c| c.is_numeric());
                 let value = token.parse::<i64>();
 
