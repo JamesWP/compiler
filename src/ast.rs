@@ -47,9 +47,10 @@ pub struct TypeDefinition {
 pub struct CompoundStatement {
     statements: Vec<Statement>,
 }
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
-    JumpStatement,
+    JumpStatement(JumpStatement),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -67,4 +68,21 @@ pub enum Expression {
 #[derive(Debug, Clone, PartialEq)]
 pub enum LiteralValue {
     Int32(i32),
+}
+
+impl From<Vec<Statement>> for CompoundStatement {
+    fn from(statements: Vec<Statement>) -> CompoundStatement {
+        CompoundStatement {
+            statements
+        }
+    }
+}
+
+impl IntoIterator for CompoundStatement {
+    type Item = Statement;
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.statements.into_iter()
+    }
 }
