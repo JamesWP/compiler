@@ -1,5 +1,6 @@
 pub trait CharPeekIt: Iterator<Item = char> {
     fn peek(&mut self) -> Option<char>;
+    fn peek_peek(&mut self) -> Option<char>;
     fn pos(&self) -> Pos;
 }
 
@@ -45,6 +46,16 @@ impl CharPeekIt for StringIter {
             None
         } else {
             let char = self.str.as_bytes()[self.pos] as char;
+
+            Some(char)
+        }
+    }
+
+    fn peek_peek(&mut self) -> Option<char> {
+        if self.str.len() <= self.pos + 1{
+            None
+        } else {
+            let char = self.str.as_bytes()[self.pos +1] as char;
 
             Some(char)
         }

@@ -1,0 +1,103 @@
+translation_unit
+first: INT
+    : function_definition
+    | translation_unit function_definition
+    ;
+
+function_definition "int foo(inti) { return 1; }"
+first: INT
+    : declaration_specifiers declarator compound_statement
+    ;
+
+declaration_specifiers "int"
+first: INT
+    : type_specifier
+    ;
+
+type_specifier "int"
+first: INT
+    : INT
+    ;
+
+declarator: "foo(int i)"
+first: IDENTIFIER
+    : direct_declarator
+    ;
+
+direct_declarator "foo" "foo(int i)"
+first: IDENTIFIER
+    : IDENTIFIER
+    | direct_declarator '(' parameter_type_list ')'
+    ;
+
+parameter_type_list "int i, int b"
+first: INT
+    : parameter_list
+    ;
+
+parameter_list "int i, int b, int c"
+first: INT
+    : parameter_declaration
+    | parameter_list ',' parameter_declaration
+    ;
+
+parameter_declaration "int i"
+first: INT
+    : declaration_specifiers declarator
+    ;
+
+compound_statement "{ return; }"
+first: PAREN
+    : '{' '}'
+    | '{' statement_list '}'
+
+statement_list "return; return;"
+first: RETURN
+    : statement
+    | statement_list statement
+    ;
+
+statement "return;"
+first: RETURN
+    : jump_statement
+    ;
+
+jump_statement "return;" "return 1;"
+first: RETURN
+    : RETURN ';'
+    | RETURN expression ';'
+    ;
+
+expression e.g. "123+123" "123"
+first: VALUE
+    : additive_expression
+    ;
+
+additive_expression e.g. "123" "1+23"
+first: VALUE
+    : unary_expression
+    | additive_expression '+' unary_expression
+    ;
+
+unary_expression e.g. "123"
+first: VALUE
+    : postfix_expression
+    ;
+
+postfix_expression e.g. "123"
+first: VALUE
+    : primary_expression
+    ;
+
+primary_expression : e.g. "123"
+first: VALUE
+    : VALUE
+    ;
+
+tokens:
+VALUE
+PLUS
+SEMICOLON
+PAREN
+IDENTIFIER
+COMMA

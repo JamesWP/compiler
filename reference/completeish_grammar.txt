@@ -36,7 +36,7 @@ type_qualifier
     ;
 
 type_specifier
-    : VOID
+    : VeID
     | CHAR
     | SHORT
     | INT
@@ -305,6 +305,10 @@ jump_statement
     | RETURN ';'
     | RETURN expression ';'
     ;
+
+expression
+	: assignment_expression
+	;
 
 // tokens
 ELLIPSIS

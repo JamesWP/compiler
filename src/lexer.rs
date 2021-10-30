@@ -1,4 +1,4 @@
-use crate::stringiter::{CharPeekIt, Pos, StringIter};
+use crate::{ast::{ResWord, Token}, stringiter::{CharPeekIt, Pos, StringIter}};
 
 pub struct Lexer {
     source: Box<dyn CharPeekIt>,
@@ -10,21 +10,6 @@ pub struct Location {
     filename: String,
     start: Pos,
     end: Pos,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum ResWord {
-    Return,
-    Int,
-}
-#[derive(Debug, Clone, PartialEq)]
-pub enum Token {
-    //StringLiteral(String),
-    Reserved(ResWord),
-    Identifier(String),
-    Paren(char),
-    Value(i64),
-    Semicolon,
 }
 
 impl Lexer {
@@ -70,13 +55,64 @@ impl Lexer {
 
         chars
     }
+
+    fn skip_comments(&mut self) -> Result<(), &'static str> {
+        loop {
+            self.read_token('0', |c| c.is_whitespace());
+
+            let next = self.source.peek();
+            let next_next = self.source.peek_peek();
+            match (next, next_next) {
+                (Some('/'), Some('*')) => {
+                    self.source.next();
+                    self.source.next();
+
+                    loop {
+                        let next = self.source.peek();
+                        let next_next = self.source.peek_peek();
+
+                        if None == next || None == next_next {
+                            eprintln!("EOF while lexing comment");
+                            return Err("EOF while lexing comment");
+                        }
+
+                        if Some('*') == next && Some('/') == next_next {
+                            self.source.next();
+                            self.source.next();
+                            break;
+                        }
+
+                        self.source.next();
+                    }
+                },
+                (Some('/'), Some('/')) => {
+                    loop {
+                        let next = self.source.peek();
+                        if None == next {
+                            eprintln!("EOF while lexing comment");
+                            return Err("EOF while lexing comment");
+                        }
+                        if Some('\n') == next {
+                            self.source.next();
+                            break;
+                        }
+
+                        self.source.next();
+                    }
+                }
+                _ => {
+                    return Ok(());
+                }
+            }
+        }
+    }
 }
 
 impl Iterator for Lexer {
     type Item = Lex;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.read_token('0', |c| c.is_whitespace());
+        self.skip_comments().ok()?;
 
         let start = self.source.pos();
         let char = self.source.next()?;
@@ -95,6 +131,8 @@ impl Iterator for Lexer {
                     return None;
                 }
             }
+            '/' => Token::Divide,
+            '+' => Token::Plus,
             _ => {
                 let token = self.read_token(char, |c| Lexer::is_ident(c));
                 if token == "int" {

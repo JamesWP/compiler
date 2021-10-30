@@ -143,18 +143,13 @@ statement
     | expression_statement
     | selection_statement
     | iteration_statement
+    | declaration_statement
+    | jump_statement
     ;
 
 compound_statement
     : '{' '}'
     | '{' statement_list '}'
-    | '{' declaration_list '}'
-    | '{' declaration_list statement_list '}'
-    ;
-
-declaration_list
-    : declaration
-    | declaration_list declaration
     ;
 
 statement_list
@@ -175,6 +170,16 @@ selection_statement
 
 iteration_statement
     : WHILE '(' expression ')' statement
+    ;
+
+declaration_statement
+    : declaration_specifiers declarator ';'
+    | declaration_specifiers declarator '=' initializer ';'
+    ;
+
+jump_statement
+    : RETURN ';'
+    | RETURN expression ';'
     ;
 
 // tokens

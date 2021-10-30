@@ -8,6 +8,7 @@ use std::vec::Vec;
 mod lexer;
 mod parser;
 mod stringiter;
+mod ast;
 
 fn compile() -> std::io::Result<object::write::Object> {
     let mut object = Object::new(BinaryFormat::Elf, Architecture::X86_64, Endianness::Little);
