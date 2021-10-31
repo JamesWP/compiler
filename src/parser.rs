@@ -105,25 +105,13 @@ fn test_parse_statement() {
 
     let parse_result = parse_statement_list(&mut input.into());
 
-    println!("Parse Result: {:?}", parse_result);
-    assert!(parse_result.is_ok());
-    let compound = parse_result.unwrap();
-    let statements: Vec<_> = compound.into_iter().collect();
-    assert_eq!(statements.len(), 1);
-    let statement = statements.get(0).unwrap();
-    assert!(matches!(statement, ast::Statement::JumpStatement(_)));
+    assert_eq!(format!("{:?}", parse_result), "Ok(CompoundStatement { statements: [JumpStatement(ReturnWithValue(Unary(Int32(3))))] })");
 
     let mut input = vec![ast::Token::Reserved(ast::ResWord::Return), ast::Token::Semicolon];
 
     let parse_result = parse_statement_list(&mut input.into());
 
-    println!("Parse Result: {:?}", parse_result);
-    assert!(parse_result.is_ok());
-    let compound = parse_result.unwrap();
-    let statements: Vec<_> = compound.into_iter().collect();
-    assert_eq!(statements.len(), 1);
-    let statement = statements.get(0).unwrap();
-    assert!(matches!(statement, ast::Statement::JumpStatement(_)));
+    assert_eq!(format!("{:?}", parse_result), "Ok(CompoundStatement { statements: [JumpStatement(Return)] })");
 }
 
 #[test]
