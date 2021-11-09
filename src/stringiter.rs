@@ -1,8 +1,6 @@
-pub trait CharPeekIt: Iterator<Item = char> {
-    fn peek(&mut self) -> Option<char>;
-    fn peek_peek(&mut self) -> Option<char>;
-    fn pos(&self) -> Pos;
-}
+
+use crate::lexer::CharPeekIt;
+use crate::lexer::Pos;
 
 pub struct StringIter {
     str: String,
@@ -11,23 +9,6 @@ pub struct StringIter {
     col: u32,
 }
 
-#[derive(Clone, Debug)]
-pub struct Pos {
-    line: u32,
-    col: u32,
-}
-
-impl Pos {
-    pub fn new(line: u32, col: u32) -> Pos {
-        Pos { line, col }
-    }
-}
-
-impl Default for Pos {
-    fn default() -> Pos {
-        Pos::new(0, 0)
-    }
-}
 
 impl StringIter {
     pub fn new(str: String) -> StringIter {

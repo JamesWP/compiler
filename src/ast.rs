@@ -15,6 +15,7 @@ pub enum Token {
     Semicolon,
     Divide,
     Plus,
+    Comma
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -70,10 +71,25 @@ pub enum LiteralValue {
     Int32(i32),
 }
 
+impl From<Vec<(TypeDefinition, String)>> for ParameterList {
+    fn from(parameters: Vec<(TypeDefinition, String)>) -> ParameterList {
+        ParameterList {
+            parameters
+        }
+    }
+}
 impl From<Vec<Statement>> for CompoundStatement {
     fn from(statements: Vec<Statement>) -> CompoundStatement {
         CompoundStatement {
             statements
+        }
+    }
+}
+
+impl From<BaseType> for TypeDefinition {
+    fn from(base: BaseType) -> TypeDefinition {
+        TypeDefinition {
+            base_type: base
         }
     }
 }
@@ -84,5 +100,39 @@ impl IntoIterator for CompoundStatement {
 
     fn into_iter(self) -> Self::IntoIter {
         self.statements.into_iter()
+    }
+}
+
+impl Default for TranslationUnit {
+    fn default() -> TranslationUnit {
+        TranslationUnit {
+            function_definitions: HashMap::new()
+        }
+    }
+}
+
+impl TranslationUnit {
+    pub fn add_definition(&mut self, name: &str, definition: FunctionDefinition) -> std::result::Result<(), &'static str> {
+        use std::collections::hash_map::Entry;
+        match self.function_definitions.entry(name.to_owned()) {
+            Entry::Vacant(entry) => { entry.insert(definition); Ok(())},
+            Entry::Occupied(_) => Err("function redeclaration")
+        }
+    }
+}
+
+impl FunctionDefinition {
+    pub fn new(return_type: TypeDefinition, parameters: ParameterList, body: CompoundStatement) -> FunctionDefinition {
+        FunctionDefinition {
+            return_type,
+            parameter_list: parameters,
+            compound_statement: body
+        }
+    }
+}
+
+impl ParameterList {
+    pub fn is_empty(&self) -> bool {
+        self.parameters.is_empty()
     }
 }

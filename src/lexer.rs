@@ -1,4 +1,28 @@
-use crate::{ast::{ResWord, Token}, stringiter::{CharPeekIt, Pos, StringIter}};
+use crate::{ast::{ResWord, Token}, stringiter::{StringIter}};
+
+pub trait CharPeekIt: Iterator<Item = char> {
+    fn peek(&mut self) -> Option<char>;
+    fn peek_peek(&mut self) -> Option<char>;
+    fn pos(&self) -> Pos;
+}
+
+#[derive(Clone, Debug)]
+pub struct Pos {
+    line: u32,
+    col: u32,
+}
+
+impl Pos {
+    pub fn new(line: u32, col: u32) -> Pos {
+        Pos { line, col }
+    }
+}
+
+impl Default for Pos {
+    fn default() -> Pos {
+        Pos::new(0, 0)
+    }
+}
 
 pub struct Lexer {
     source: Box<dyn CharPeekIt>,
@@ -17,6 +41,13 @@ impl Lexer {
         Lexer {
             source: Box::new(StringIter::new(content)),
             filename: "raw_input_from_string.txt".to_owned(),
+        }
+    }
+
+    pub fn new(source: Box<dyn CharPeekIt>, filename: &str) -> Lexer{
+        Lexer {
+            source,
+            filename: filename.to_owned()
         }
     }
 }
@@ -120,6 +151,7 @@ impl Iterator for Lexer {
         let token = match &char {
             '{' | '}' | '(' | ')' => Token::Paren(char),
             ';' => Token::Semicolon,
+            ',' => Token::Comma,
             '0' ..= '9' => {
                 let token = self.read_token(char, |c| c.is_numeric());
                 let value = token.parse::<i64>();
