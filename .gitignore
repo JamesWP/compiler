@@ -2,3 +2,6 @@
 *.o
 *.tsk
 *.out
+a.S
+.*.swp
+example_01

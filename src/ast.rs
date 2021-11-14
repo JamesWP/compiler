@@ -20,13 +20,13 @@ pub enum Token {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TranslationUnit {
-    function_definitions: HashMap<String, FunctionDefinition>,
+    pub function_definitions: HashMap<String, FunctionDefinition>,
 }
 #[derive(Debug, Clone, PartialEq)]
 pub struct FunctionDefinition {
     return_type: TypeDefinition,
-    parameter_list: ParameterList,
-    compound_statement: CompoundStatement,
+    pub parameter_list: ParameterList,
+    pub compound_statement: CompoundStatement,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -100,6 +100,12 @@ impl IntoIterator for CompoundStatement {
 
     fn into_iter(self) -> Self::IntoIter {
         self.statements.into_iter()
+    }
+}
+
+impl CompoundStatement {
+    pub fn iter(&self) -> std::slice::Iter<Statement> {
+        self.statements.iter()
     }
 }
 
