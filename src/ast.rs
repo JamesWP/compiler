@@ -15,7 +15,7 @@ pub enum Token {
     Semicolon,
     Divide,
     Plus,
-    Comma
+    Comma,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -41,7 +41,7 @@ pub enum BaseType {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypeDefinition {
-    base_type: BaseType,
+    pub base_type: BaseType,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -73,24 +73,18 @@ pub enum LiteralValue {
 
 impl From<Vec<(TypeDefinition, String)>> for ParameterList {
     fn from(parameters: Vec<(TypeDefinition, String)>) -> ParameterList {
-        ParameterList {
-            parameters
-        }
+        ParameterList { parameters }
     }
 }
 impl From<Vec<Statement>> for CompoundStatement {
     fn from(statements: Vec<Statement>) -> CompoundStatement {
-        CompoundStatement {
-            statements
-        }
+        CompoundStatement { statements }
     }
 }
 
 impl From<BaseType> for TypeDefinition {
     fn from(base: BaseType) -> TypeDefinition {
-        TypeDefinition {
-            base_type: base
-        }
+        TypeDefinition { base_type: base }
     }
 }
 
@@ -118,27 +112,38 @@ impl ParameterList {
 impl Default for TranslationUnit {
     fn default() -> TranslationUnit {
         TranslationUnit {
-            function_definitions: HashMap::new()
+            function_definitions: HashMap::new(),
         }
     }
 }
 
 impl TranslationUnit {
-    pub fn add_definition(&mut self, name: &str, definition: FunctionDefinition) -> std::result::Result<(), &'static str> {
+    pub fn add_definition(
+        &mut self,
+        name: &str,
+        definition: FunctionDefinition,
+    ) -> std::result::Result<(), &'static str> {
         use std::collections::hash_map::Entry;
         match self.function_definitions.entry(name.to_owned()) {
-            Entry::Vacant(entry) => { entry.insert(definition); Ok(())},
-            Entry::Occupied(_) => Err("function redeclaration")
+            Entry::Vacant(entry) => {
+                entry.insert(definition);
+                Ok(())
+            }
+            Entry::Occupied(_) => Err("function redeclaration"),
         }
     }
 }
 
 impl FunctionDefinition {
-    pub fn new(return_type: TypeDefinition, parameters: ParameterList, body: CompoundStatement) -> FunctionDefinition {
+    pub fn new(
+        return_type: TypeDefinition,
+        parameters: ParameterList,
+        body: CompoundStatement,
+    ) -> FunctionDefinition {
         FunctionDefinition {
             return_type,
             parameter_list: parameters,
-            compound_statement: body
+            compound_statement: body,
         }
     }
 }

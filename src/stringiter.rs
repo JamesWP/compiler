@@ -1,4 +1,3 @@
-
 use crate::lexer::CharPeekIt;
 use crate::lexer::Pos;
 
@@ -8,7 +7,6 @@ pub struct StringIter {
     line: u32,
     col: u32,
 }
-
 
 impl StringIter {
     pub fn new(str: String) -> StringIter {
@@ -33,10 +31,10 @@ impl CharPeekIt for StringIter {
     }
 
     fn peek_peek(&mut self) -> Option<char> {
-        if self.str.len() <= self.pos + 1{
+        if self.str.len() <= self.pos + 1 {
             None
         } else {
-            let char = self.str.as_bytes()[self.pos +1] as char;
+            let char = self.str.as_bytes()[self.pos + 1] as char;
 
             Some(char)
         }

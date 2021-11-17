@@ -6,14 +6,14 @@ pub struct FileIter {
     file: std::fs::File,
     line: u32,
     col: u32,
-    buff: String
+    buff: String,
 }
 
 impl FileIter {
     fn fill_buffer(&mut self) {
         // ensure there is at least 2 characters available in the buffer
         if self.buff.len() < 2 {
-            assert!(self.buff.len()<=10);
+            assert!(self.buff.len() <= 10);
             let available = self.buff.capacity() - self.buff.len();
             let mut handle = (&mut self.file).take(available as u64);
             handle.read_to_string(&mut self.buff).unwrap();
@@ -27,14 +27,14 @@ impl From<std::fs::File> for FileIter {
             file,
             line: 0,
             col: 0,
-            buff: String::with_capacity(10)
+            buff: String::with_capacity(10),
         }
     }
 }
 
 impl Iterator for FileIter {
     type Item = char;
-    fn next(&mut self)->Option<Self::Item> {
+    fn next(&mut self) -> Option<Self::Item> {
         self.fill_buffer();
 
         if self.buff.len() == 0 {
@@ -73,7 +73,7 @@ impl CharPeekIt for FileIter {
 
         Some(char)
     }
-    
+
     fn peek_peek(&mut self) -> Option<char> {
         self.fill_buffer();
 

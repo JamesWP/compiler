@@ -1,4 +1,7 @@
-use crate::{ast::{ResWord, Token}, stringiter::{StringIter}};
+use crate::{
+    ast::{ResWord, Token},
+    stringiter::StringIter,
+};
 
 pub trait CharPeekIt: Iterator<Item = char> {
     fn peek(&mut self) -> Option<char>;
@@ -44,10 +47,10 @@ impl Lexer {
         }
     }
 
-    pub fn new(source: Box<dyn CharPeekIt>, filename: &str) -> Lexer{
+    pub fn new(source: Box<dyn CharPeekIt>, filename: &str) -> Lexer {
         Lexer {
             source,
-            filename: filename.to_owned()
+            filename: filename.to_owned(),
         }
     }
 }
@@ -115,22 +118,20 @@ impl Lexer {
 
                         self.source.next();
                     }
-                },
-                (Some('/'), Some('/')) => {
-                    loop {
-                        let next = self.source.peek();
-                        if None == next {
-                            eprintln!("EOF while lexing comment");
-                            return Err("EOF while lexing comment");
-                        }
-                        if Some('\n') == next {
-                            self.source.next();
-                            break;
-                        }
-
-                        self.source.next();
-                    }
                 }
+                (Some('/'), Some('/')) => loop {
+                    let next = self.source.peek();
+                    if None == next {
+                        eprintln!("EOF while lexing comment");
+                        return Err("EOF while lexing comment");
+                    }
+                    if Some('\n') == next {
+                        self.source.next();
+                        break;
+                    }
+
+                    self.source.next();
+                },
                 _ => {
                     return Ok(());
                 }
@@ -152,7 +153,7 @@ impl Iterator for Lexer {
             '{' | '}' | '(' | ')' => Token::Paren(char),
             ';' => Token::Semicolon,
             ',' => Token::Comma,
-            '0' ..= '9' => {
+            '0'..='9' => {
                 let token = self.read_token(char, |c| c.is_numeric());
                 let value = token.parse::<i64>();
 

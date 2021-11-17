@@ -163,7 +163,7 @@ fn parse_declarator(input: &mut ParserInput) -> ParseResult<(String, ast::Parame
 fn parse_parameter_list(input: &mut ParserInput) -> ParseResult<ast::ParameterList> {
     let mut param_list = Vec::new();
 
-    loop { 
+    loop {
         if input.peek() == Some(&ast::Token::Paren(')')) {
             break;
         }
@@ -181,12 +181,15 @@ fn parse_parameter_list(input: &mut ParserInput) -> ParseResult<ast::ParameterLi
             input.pop().unwrap();
             continue;
         }
-        
+
         if input.peek() == Some(&ast::Token::Paren(')')) {
             break;
         }
 
-        return Err(format!("Expected comma or close paren, instead got {:?}", input.peek()));
+        return Err(format!(
+            "Expected comma or close paren, instead got {:?}",
+            input.peek()
+        ));
     }
 
     Ok(param_list.into())
@@ -219,17 +222,14 @@ fn test_parse_translation_unit() {
         ast::Token::Reserved(ast::ResWord::Return),
         ast::Token::Value(3),
         ast::Token::Semicolon,
-        ast::Token::Paren('}')
+        ast::Token::Paren('}'),
     ];
 
     let parse_result = parse_translation_unit(&mut input.into());
 
     println!("{:#?}", parse_result);
 
-    assert_eq!(
-        format!("{:#?}", parse_result),
-        ""
-    );
+    assert_eq!(format!("{:#?}", parse_result), "");
 }
 #[test]
 fn test_parse_statement() {

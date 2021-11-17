@@ -6,12 +6,12 @@ use std::process::Command;
 use std::vec::Vec;
 
 mod ast;
+mod compiler;
+mod fileiter;
 mod lexer;
 mod parser;
-mod stringiter;
-mod fileiter;
-mod compiler;
 mod platform;
+mod stringiter;
 
 fn main() -> std::io::Result<()> {
     let mut filename = "examples/01_simple.c".to_owned();
@@ -36,13 +36,16 @@ fn main() -> std::io::Result<()> {
 
     println!("Reading {}", filename);
 
-    let file = fileiter::FileIter::from(std::fs::File::open(filename.clone())?); 
+    let file = fileiter::FileIter::from(std::fs::File::open(filename.clone())?);
     let lexer = lexer::Lexer::new(Box::new(file), &filename);
-    let parser_input = lexer.map(|(l,t)| t).collect::<Vec<_>>();
+    let parser_input = lexer.map(|(l, t)| t).collect::<Vec<_>>();
     let translation_unit = parser::parse_translation_unit(&mut parser_input.into());
 
     if translation_unit.is_err() {
-        return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, translation_unit.err().unwrap()));
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            translation_unit.err().unwrap(),
+        ));
     }
 
     let assembly = compiler::compile(&translation_unit.unwrap())?;
@@ -54,13 +57,24 @@ fn main() -> std::io::Result<()> {
 
     println!("Written to {}", output_filename);
 
-    let mut child = std::process::Command::new("as").arg("-").args(["-o", "a.out"]).stdin(std::process::Stdio::piped()).spawn()?;
-    child.stdin.as_mut().unwrap().write_all(assembly.as_bytes())?;
+    let mut child = std::process::Command::new("as")
+        .arg("-")
+        .args(["-o", "a.out"])
+        .stdin(std::process::Stdio::piped())
+        .spawn()?;
+    child
+        .stdin
+        .as_mut()
+        .unwrap()
+        .write_all(assembly.as_bytes())?;
 
     let exit = child.wait()?;
 
-    if !exit.success()  {
-        return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("Assembler exited with error {}", exit.code().unwrap_or(-1))));
+    if !exit.success() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("Assembler exited with error {}", exit.code().unwrap_or(-1)),
+        ));
     }
 
     println!("Assembled to a.out");
