@@ -19,8 +19,40 @@ fn compile_translation_unit<T: Write>(output: &mut T, translation_unit: &ast::Tr
     for func in &translation_unit.function_definitions {
         let (name, definition) = func;
         let statement = &definition.compound_statement;
+        let parameter_list = &definition.parameter_list;
+
+        writeln!(output, ".type {}, @function", name);
         writeln!(output, ".global {}", name);
+
+        // Function label
         writeln!(output, "{}:", name);
+
+        // set up base pointer for frame
+        // -> Does this need to change if we are not leaf?
+        writeln!(output, "    pushq {}", x86_64_reg::RBP);
+        writeln!(output, "    movq {}, {}", x86_64_reg::RSP, x86_64_reg::RBP);
+
+        // Calculate layout of stack frame
+        let function_stack_frame = compute_stack_layout_for_function(parameter_list);
+
+        // Move all parameters to stack
+        for param_def in function_stack_frame {
+            // maybe this should be a match?
+            if !param_def.reg.is_some() {
+                unimplemented!();
+            }
+
+            if !param_def.is_32_bit() {
+                unimplemented!();
+            }
+
+            writeln!(
+                output,
+                "    movl {}, {}",
+                param_def.reg.unwrap(), param_def.stack_allocation
+            );
+        }
+
         for statement in statement.iter() {
             compile_statement(output, statement)?;
         }
@@ -33,10 +65,14 @@ fn compile_translation_unit<T: Write>(output: &mut T, translation_unit: &ast::Tr
 fn compile_statement<T: Write>(output: &mut T, statement: &ast::Statement) -> std::io::Result<()> {
     match statement {
         ast::Statement::JumpStatement(ast::JumpStatement::Return) => {
+            // TODO: read information about all registers which need popping
+            writeln!(output, "    popq {}", x86_64_reg::RBP);
             writeln!(output, "    ret");
-        },
+        }
         ast::Statement::JumpStatement(ast::JumpStatement::ReturnWithValue(s)) => {
+            // TODO: read information about all registers which need popping
             compile_expression(output, s, x86_64_reg::RAX)?;
+            writeln!(output, "    popq {}", x86_64_reg::RBP);
             writeln!(output, "    ret");
         }
     }
@@ -52,4 +88,42 @@ fn compile_expression<T: Write>(output: &mut T, expression: &ast::Expression, de
         }
     }
     Ok(())
+}
+
+fn compute_stack_layout_for_function(parameter_list: &ast::ParameterList) -> platform::StackLayout {
+    let mut layout = platform::StackLayout::default();
+    let mut platform_abi = platform::ParameterPlacement::default();
+
+    let mut stack_size = 0;
+    let mut next_free_location = 0;
+
+    for (type_def, name) in parameter_list.iter() {
+        // calculate which register this parameter comes in
+        let param_location = platform_abi.place(type_def); 
+        
+        // TODO: handle parameters which don't come in registers
+        let param_reg = param_location.reg.unwrap();
+
+        let size_in_bytes = type_def.size();
+
+        // Make space in the stack
+        stack_size += size_in_bytes;
+        next_free_location += size_in_bytes;
+
+        let location_in_stack = 0 - next_free_location as i32;
+
+        // TODO: worry about allignment
+        if size_in_bytes != 4 {
+            unimplemented!();
+        }
+        if (next_free_location & 0x3) != 0{
+            unimplemented!();
+        }
+
+        let allocation = platform::StackRelativeLocation::new(location_in_stack, size_in_bytes);
+        let param_info = platform::ParameterInfo::new(name, param_reg, type_def, allocation);
+        layout.push(param_info);
+    }
+
+    layout
 }

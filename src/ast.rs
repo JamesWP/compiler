@@ -109,6 +109,12 @@ impl CompoundStatement {
     }
 }
 
+impl ParameterList {
+    pub fn iter(&self) -> std::slice::Iter<(TypeDefinition, String)> {
+        self.parameters.iter()
+    }
+}
+
 impl Default for TranslationUnit {
     fn default() -> TranslationUnit {
         TranslationUnit {
@@ -140,5 +146,15 @@ impl FunctionDefinition {
 impl ParameterList {
     pub fn is_empty(&self) -> bool {
         self.parameters.is_empty()
+    }
+}
+
+impl TypeDefinition {
+    pub fn size(&self) -> usize {
+        if self.base_type != BaseType::INT {
+            unimplemented!();
+        }
+
+        4
     }
 }
