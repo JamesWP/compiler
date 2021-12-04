@@ -35,6 +35,7 @@ impl From<Vec<ast::Token>> for ParserInput {
     }
 }
 
+#[allow(dead_code)]
 fn parse_statement_list(input: &mut ParserInput) -> ParseResult<ast::CompoundStatement> {
     let mut statements = Vec::new();
     statements.push(parse_statement(input)?);
@@ -94,14 +95,19 @@ fn parse_postfix_expression(input: &mut ParserInput) -> ParseResult<ast::Express
     Ok(ast::Expression::Unary(value))
 }
 
-fn parse_primary_expression(input: &mut ParserInput) -> ParseResult<ast::LiteralValue> {
+fn parse_primary_expression(input: &mut ParserInput) -> ParseResult<ast::Value> {
     match input.peek() {
         Some(ast::Token::Value(v)) => {
             let value = *v;
             input.pop();
-            Ok(ast::LiteralValue::Int32 { 0: value as i32 })
+            Ok(ast::Value::Literal(ast::LiteralValue::Int32 { 0: value as i32 }))
+        },
+        Some(ast::Token::Identifier(id)) => {
+            let value = id.clone();
+            input.pop();
+            Ok(ast::Value::Identifier(value))
         }
-        _ => Err("Unable to parse primary expression".to_owned()),
+        _ => Err(format!("Unable to parse primary expression. expected token found {:?}", input.peek())),
     }
 }
 

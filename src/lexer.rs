@@ -40,6 +40,7 @@ pub struct Location {
 }
 
 impl Lexer {
+    #[allow(dead_code)]
     pub fn new_from_string(content: String) -> Lexer {
         Lexer {
             source: Box::new(StringIter::new(content)),

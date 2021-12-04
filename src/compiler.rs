@@ -1,29 +1,32 @@
 use crate::ast;
 use crate::platform;
-use crate::platform::x86_64_reg as reg;
+use crate::platform::X86_64Reg as reg;
 use crate::platform::DecimalLiteral as DL;
+use crate::platform::Operand;
 use std::fmt::Display;
 use std::fmt::Write;
 
 struct CompilationState {
     output: String,
+    function_stack_frame: Option<platform::StackLayout>
 }
 
 impl Default for CompilationState {
     fn default() -> CompilationState {
         CompilationState {
             output: String::new(),
+            function_stack_frame: None
         }
     }
 }
 
 impl CompilationState {
     fn output_comment<T: Display>(&mut self, message: T) -> std::io::Result<()> {
-        writeln!(self.output, "# {}", message);
+        writeln!(self.output, "# {}", message).unwrap();
         Ok(())
     }
     fn output_section<T: Display>(&mut self, section: T) -> std::io::Result<()> {
-        writeln!(self.output, "        .{}", section);
+        writeln!(self.output, "        .{}", section).unwrap();
         Ok(())
     }
     fn output_type<T: Display, R: Display>(
@@ -31,34 +34,34 @@ impl CompilationState {
         name: T,
         symbol_type: R,
     ) -> std::io::Result<()> {
-        writeln!(self.output, "        .type {}, @{}", name, symbol_type);
+        writeln!(self.output, "        .type {}, @{}", name, symbol_type).unwrap();
         Ok(())
     }
     fn output_global_specifier<T: Display>(&mut self, name: T) -> std::io::Result<()> {
-        writeln!(self.output, "        .global {}", name);
+        writeln!(self.output, "        .global {}", name).unwrap();
         Ok(())
     }
     fn output_function_label<T: Display>(&mut self, name: T) -> std::io::Result<()> {
-        writeln!(self.output, "{}:", name);
+        writeln!(self.output, "{}:", name).unwrap();
         Ok(())
     }
     fn output_newline(&mut self) -> std::io::Result<()> {
-        writeln!(self.output);
+        writeln!(self.output).unwrap();
         Ok(())
     }
 }
 
 macro_rules! assemble {
     ($state:expr, $nmemon:expr) => {{
-        writeln!($state.output, "        {:<8} ", $nmemon);
+        writeln!($state.output, "        {:<8} ", $nmemon).unwrap();
     }};
     ($state:expr, $nmemon:expr, $arg1:expr) => {{
-        write!($state.output, "        {:<8} ", $nmemon);
-        writeln!($state.output, "{}", $arg1)
+        write!($state.output, "        {:<8} ", $nmemon).unwrap();
+        writeln!($state.output, "{}", $arg1).unwrap();
     }};
     ($state:expr, $nmemon:expr, $arg1:expr, $arg2:expr) => {{
-        write!($state.output, "        {:<8} ", $nmemon);
-        writeln!($state.output, "{}, {}", $arg1, $arg2)
+        write!($state.output, "        {:<8} ", $nmemon).unwrap();
+        writeln!($state.output, "{}, {}", $arg1, $arg2).unwrap();
     }};
 }
 
@@ -100,28 +103,43 @@ impl CompilationState {
             assemble!(self, "movq", reg::RSP, reg::RBP);
 
             // Calculate layout of stack frame
-            let function_stack_frame = compute_stack_layout_for_function(parameter_list);
+            self.function_stack_frame = Some(compute_stack_layout_for_function(parameter_list));
+
+            let mut platform_abi = platform::ParameterPlacement::default();
 
             // Move all parameters to stack
-            for param_def in function_stack_frame {
-                // maybe this should be a match?
-                if !param_def.reg.is_some() {
+            for (stack_location, (param_type, _)) in self.function_stack_frame.as_ref().unwrap().iter().zip(parameter_list.iter()) {
+                // calculate which register this parameter comes in
+                let param_location = platform_abi.place(param_type);
+
+                // TODO: handle parameters which don't come in registers
+                let param_reg = param_location.reg.unwrap();
+
+                if !stack_location.is_32_bit() {
                     unimplemented!();
                 }
 
-                if !param_def.is_32_bit() {
-                    unimplemented!();
-                }
                 assemble!(
                     self,
                     "movl",
-                    param_def.reg.unwrap(),
-                    param_def.stack_allocation
+                    param_reg,
+                    stack_location.stack_allocation
                 );
             }
 
             for statement in statement.iter() {
                 self.compile_statement(statement)?;
+            }
+
+            let stack_comments: Vec<_> = self.function_stack_frame
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|x| format!("{:10} in {:?}", format!("{}", x.stack_allocation), x.name))
+                .collect();
+
+            for x in stack_comments {
+                self.output_comment(x)?;
             }
         }
 
@@ -137,7 +155,7 @@ impl CompilationState {
             }
             ast::Statement::JumpStatement(ast::JumpStatement::ReturnWithValue(s)) => {
                 // TODO: read information about all registers which need popping
-                self.compile_expression(s, reg::EAX)?;
+                self.compile_expression(s, &reg::EAX)?;
                 assemble!(self, "popq", reg::RBP);
                 assemble!(self, "ret");
             }
@@ -146,17 +164,42 @@ impl CompilationState {
         Ok(())
     }
 
-    fn compile_expression(
+    fn compile_expression<Dest: Operand>(
         &mut self,
         expression: &ast::Expression,
-        destination: reg,
+        destination: &Dest,
     ) -> std::io::Result<()> {
+        let scratch_register = reg::EDI;
+
         match expression {
             ast::Expression::Additive(lhs, rhs) => {
-                unimplemented!();
+                self.compile_expression(lhs.as_ref(), destination)?;
+                let frame = self.function_stack_frame.as_mut().unwrap();
+                let result_type = ast::TypeDefinition::from(ast::BaseType::INT);
+                let allocation = frame.allocate("expression rhs", &result_type, result_type.size());
+                self.compile_expression(rhs, &allocation)?;
+
+                let scratch_register = reg::EDI;
+                if allocation.is_memory() && destination.is_memory() {
+                    // use scratch register to hold rhs value. as add can only have a single memory operand.
+                    assemble!(self, "movl", allocation, scratch_register);
+                    assemble!(self, "addl", scratch_register, destination);
+                } else { 
+                    assemble!(self, "addl", allocation, destination);
+                }
             }
-            ast::Expression::Unary(ast::LiteralValue::Int32(value)) => {
+            ast::Expression::Unary(ast::Value::Literal(ast::LiteralValue::Int32(value))) => {
                 assemble!(self, "movl", DL::new(value), destination);
+            }
+            ast::Expression::Unary(ast::Value::Identifier(name)) => {
+                let location = self.function_stack_frame.as_ref().unwrap().get_location(name)?;
+                if location.is_memory() && destination.is_memory() {
+                    // use scratch register to hold rhs value. as add can only have a single memory operand.
+                    assemble!(self, "movl", location, scratch_register);
+                    assemble!(self, "movl", scratch_register, destination);
+                } else {
+                    assemble!(self, "movl", location, destination);
+                }
             }
         }
         Ok(())
@@ -165,37 +208,10 @@ impl CompilationState {
 
 fn compute_stack_layout_for_function(parameter_list: &ast::ParameterList) -> platform::StackLayout {
     let mut layout = platform::StackLayout::default();
-    let mut platform_abi = platform::ParameterPlacement::default();
-
-    let mut stack_size = 0;
-    let mut next_free_location = 0;
-
+    
     for (type_def, name) in parameter_list.iter() {
-        // calculate which register this parameter comes in
-        let param_location = platform_abi.place(type_def);
-
-        // TODO: handle parameters which don't come in registers
-        let param_reg = param_location.reg.unwrap();
-
         let size_in_bytes = type_def.size();
-
-        // Make space in the stack
-        stack_size += size_in_bytes;
-        next_free_location += size_in_bytes;
-
-        let location_in_stack = 0 - next_free_location as i32;
-
-        // TODO: worry about allignment
-        if size_in_bytes != 4 {
-            unimplemented!();
-        }
-        if (next_free_location & 0x3) != 0 {
-            unimplemented!();
-        }
-
-        let allocation = platform::StackRelativeLocation::new(location_in_stack, size_in_bytes);
-        let param_info = platform::ParameterInfo::new(name, param_reg, type_def, allocation);
-        layout.push(param_info);
+        layout.allocate(name, type_def, size_in_bytes);
     }
 
     layout

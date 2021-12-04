@@ -1,8 +1,10 @@
 use crate::ast;
 use std::fmt::Display;
+use std::collections::HashMap;
 
 #[derive(Clone)]
-pub enum x86_64_reg {
+#[allow(dead_code)]
+pub enum X86_64Reg {
     RAX,  // register a extended
     RBX,  // register b extended
     RCX,  // register c extended
@@ -37,21 +39,26 @@ pub enum x86_64_reg {
     R15D, // lower hald of R15
 }
 
+#[derive(Clone)]
 pub struct StackRelativeLocation {
     // offset from this register (RBP)
-    reg: x86_64_reg,
+    reg: X86_64Reg,
     // location relative to register
     offset: i32,
     // size of location,
-    size: usize,
+    pub size: usize,
 }
 
-pub type StackLayout = Vec<ParameterInfo>;
+pub struct StackLayout {
+    stack_size: usize,
+    next_free_location: usize,
+    allocated: Vec<ParameterInfo>,
+    lookup_map: HashMap<String, usize>
+}
 
 pub struct ParameterInfo {
     pub name: String,
     pub param_type: ast::TypeDefinition,
-    pub reg: Option<x86_64_reg>,
     pub stack_allocation: StackRelativeLocation,
 }
 
@@ -59,21 +66,22 @@ pub struct DecimalLiteral {
     value: i32
 }
 
-const INTEGER_64_REGISTER_ORDER: [x86_64_reg; 6] = [
-    x86_64_reg::RDI,
-    x86_64_reg::RSI,
-    x86_64_reg::RDX,
-    x86_64_reg::RCX,
-    x86_64_reg::R8,
-    x86_64_reg::R9,
+#[allow(dead_code)]
+const INTEGER_64_REGISTER_ORDER: [X86_64Reg; 6] = [
+    X86_64Reg::RDI,
+    X86_64Reg::RSI,
+    X86_64Reg::RDX,
+    X86_64Reg::RCX,
+    X86_64Reg::R8,
+    X86_64Reg::R9,
 ];
-const INTEGER_32_REGISTER_ORDER: [x86_64_reg; 6] = [
-    x86_64_reg::EDI,
-    x86_64_reg::ESI,
-    x86_64_reg::EDX,
-    x86_64_reg::ECX,
-    x86_64_reg::R8D,
-    x86_64_reg::R9D,
+const INTEGER_32_REGISTER_ORDER: [X86_64Reg; 6] = [
+    X86_64Reg::EDI,
+    X86_64Reg::ESI,
+    X86_64Reg::EDX,
+    X86_64Reg::ECX,
+    X86_64Reg::R8D,
+    X86_64Reg::R9D,
 ];
 
 pub struct ParameterPlacement {
@@ -81,35 +89,51 @@ pub struct ParameterPlacement {
 }
 
 pub struct Parameter {
-    pub reg: Option<x86_64_reg>,
+    pub reg: Option<X86_64Reg>,
 }
 
-impl Display for x86_64_reg {
+pub trait Operand: Display {
+    fn is_memory(&self) -> bool;
+}
+
+impl Operand for X86_64Reg {
+    fn is_memory(&self) -> bool {
+        false
+    }
+}
+
+impl Operand for StackRelativeLocation {
+    fn is_memory(&self) -> bool {
+        true
+    }
+}
+
+impl Display for X86_64Reg {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         write!(
             formatter,
             "%{}",
             match self {
-                x86_64_reg::RAX => "rax",
-                x86_64_reg::RBX => "rbx",
-                x86_64_reg::RCX => "rcx",
-                x86_64_reg::RDX => "rdx",
-                x86_64_reg::RBP => "rbp",
-                x86_64_reg::RSP => "rsp",
-                x86_64_reg::RSI => "rsi",
-                x86_64_reg::RDI => "rdi",
-                x86_64_reg::R8 => "r8",
-                x86_64_reg::R9 => "r9",
-                x86_64_reg::EAX => "eax",
-                x86_64_reg::EBX => "ebx",
-                x86_64_reg::ECX => "ecx",
-                x86_64_reg::EDX => "edx",
-                x86_64_reg::EBP => "ebp",
-                x86_64_reg::ESP => "esp",
-                x86_64_reg::ESI => "esi",
-                x86_64_reg::EDI => "edi",
-                x86_64_reg::R8D => "r8d",
-                x86_64_reg::R9D => "r8d",
+                X86_64Reg::RAX => "rax",
+                X86_64Reg::RBX => "rbx",
+                X86_64Reg::RCX => "rcx",
+                X86_64Reg::RDX => "rdx",
+                X86_64Reg::RBP => "rbp",
+                X86_64Reg::RSP => "rsp",
+                X86_64Reg::RSI => "rsi",
+                X86_64Reg::RDI => "rdi",
+                X86_64Reg::R8 => "r8",
+                X86_64Reg::R9 => "r9",
+                X86_64Reg::EAX => "eax",
+                X86_64Reg::EBX => "ebx",
+                X86_64Reg::ECX => "ecx",
+                X86_64Reg::EDX => "edx",
+                X86_64Reg::EBP => "ebp",
+                X86_64Reg::ESP => "esp",
+                X86_64Reg::ESI => "esi",
+                X86_64Reg::EDI => "edi",
+                X86_64Reg::R8D => "r8d",
+                X86_64Reg::R9D => "r8d",
                 _ => unimplemented!(),
             }
         )?;
@@ -132,7 +156,7 @@ impl DecimalLiteral {
 }
 
 impl Parameter {
-    pub fn new(reg: x86_64_reg) -> Parameter {
+    pub fn new(reg: X86_64Reg) -> Parameter {
         Parameter { reg: Some(reg) }
     }
 }
@@ -155,13 +179,22 @@ impl ParameterPlacement {
                 self.num_integer_args += 1;
                 Parameter::new(reg)
             }
-            _ => {
-                unimplemented!();
-            }
         }
     }
 }
 impl ParameterInfo {
+    pub fn new(
+        name: &str,
+        param_type: &ast::TypeDefinition,
+        stack_allocation: StackRelativeLocation,
+    ) -> ParameterInfo {
+        ParameterInfo {
+            name: name.to_owned(),
+            param_type: param_type.clone(),
+            stack_allocation,
+        }
+    }
+
     pub fn is_32_bit(&self) -> bool {
         true
     }
@@ -170,7 +203,7 @@ impl ParameterInfo {
 impl StackRelativeLocation {
     pub fn new(offset: i32, size: usize) -> StackRelativeLocation {
         StackRelativeLocation {
-            reg: x86_64_reg::RBP,
+            reg: X86_64Reg::RBP,
             offset,
             size,
         }
@@ -184,18 +217,52 @@ impl Display for StackRelativeLocation {
     }
 }
 
-impl ParameterInfo {
-    pub fn new(
-        name: &str,
-        reg: x86_64_reg,
-        param_type: &ast::TypeDefinition,
-        stack_allocation: StackRelativeLocation,
-    ) -> ParameterInfo {
-        ParameterInfo {
-            name: name.to_owned(),
-            reg: Some(reg),
-            param_type: param_type.clone(),
-            stack_allocation,
+impl StackLayout {
+    pub fn iter<'a>(&'a self) -> std::slice::Iter<'a, ParameterInfo> {
+        self.allocated.iter()
+    }
+}
+
+impl Default for StackLayout {
+    fn default() -> StackLayout {
+        StackLayout {
+            stack_size: 0,
+            next_free_location: 0,
+            allocated: Vec::default(),
+            lookup_map: HashMap::default()
+        }
+    }
+}
+
+impl StackLayout {
+    pub fn allocate(&mut self, name: &str, type_def: &ast::TypeDefinition, size_in_bytes: usize) -> StackRelativeLocation {
+        // Make space in the stack
+        self.stack_size += size_in_bytes;
+        self.next_free_location += size_in_bytes;
+
+        let location_in_stack = 0 - self.next_free_location as i32;
+
+        // TODO: worry about allignment
+        if size_in_bytes != 4 {
+            unimplemented!();
+        }
+        if (self.next_free_location & 0x3) != 0 {
+            unimplemented!();
+        }
+
+        let allocation = StackRelativeLocation::new(location_in_stack, size_in_bytes);
+        let param_info = ParameterInfo::new(name, type_def, allocation.clone());
+        self.allocated.push(param_info);
+
+        self.lookup_map.insert(name.to_owned(), self.allocated.len()-1);
+
+        allocation
+    }
+
+    pub fn get_location(&self, name: &String) -> std::io::Result<StackRelativeLocation> {
+        match self.lookup_map.get(name) {
+            Some(allocation) => Ok(self.allocated[*allocation].stack_allocation.clone()),
+            None => Err(std::io::Error::new(std::io::ErrorKind::NotFound, format!("variable {} not defined", name)))
         }
     }
 }

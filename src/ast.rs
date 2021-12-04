@@ -63,7 +63,13 @@ pub enum JumpStatement {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expression {
     Additive(Box<Expression>, Box<Expression>),
-    Unary(LiteralValue),
+    Unary(Value),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Value {
+    Literal(LiteralValue),
+    Identifier(String)
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -1,9 +1,3 @@
-use object::write::{Object, SectionId, StandardSection, Symbol, SymbolSection};
-use object::{Architecture, BinaryFormat, Endianness, SymbolFlags, SymbolKind, SymbolScope};
-use std::fs::File;
-use std::io::{prelude::*, ErrorKind};
-use std::process::Command;
-use std::vec::Vec;
 
 mod ast;
 mod compiler;
@@ -38,7 +32,7 @@ fn main() -> std::io::Result<()> {
 
     let file = fileiter::FileIter::from(std::fs::File::open(filename.clone())?);
     let lexer = lexer::Lexer::new(Box::new(file), &filename);
-    let parser_input = lexer.map(|(l, t)| t).collect::<Vec<_>>();
+    let parser_input = lexer.map(|(_l, t)| t).collect::<Vec<_>>();
     let translation_unit = parser::parse_translation_unit(&mut parser_input.into());
 
     if translation_unit.is_err() {
