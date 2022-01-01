@@ -159,6 +159,15 @@ impl CompilationState {
                 assemble!(self, "popq", reg::RBP);
                 assemble!(self, "ret");
             }
+            ast::Statement::Declaration(declaration) => {
+                let allocation_size = declaration.decl_type.size();
+                let frame = self.function_stack_frame.as_mut().unwrap();
+                
+                let allocation = frame.allocate(&declaration.name, &declaration.decl_type, allocation_size);
+                if let Some(e) = &declaration.expression {
+                    self.compile_expression(&e, &allocation)?;
+                }
+            }
         }
 
         Ok(())

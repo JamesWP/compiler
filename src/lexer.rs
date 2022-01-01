@@ -167,6 +167,7 @@ impl Iterator for Lexer {
             }
             '/' => Token::Divide,
             '+' => Token::Plus,
+            '=' => Token::Equals,
             _ => {
                 let token = self.read_token(char, |c| Lexer::is_ident(c));
                 if token == "int" {

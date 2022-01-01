@@ -50,16 +50,36 @@ fn parse_statement_list(input: &mut ParserInput) -> ParseResult<ast::CompoundSta
 }
 
 fn parse_statement(input: &mut ParserInput) -> ParseResult<ast::Statement> {
-    input.expect(&ast::Token::Reserved(ast::ResWord::Return))?;
-    if input.peek() == Some(&ast::Token::Semicolon) {
-        Ok(ast::Statement::JumpStatement(ast::JumpStatement::Return))
-    } else {
-        let return_expr = parse_expression(input)?;
-        input.expect(&ast::Token::Semicolon)?;
+    
+    if input.peek() == Some(&ast::Token::Reserved(ast::ResWord::Return)) {
+        input.pop();
+        if input.peek() == Some(&ast::Token::Semicolon) {
+            Ok(ast::Statement::JumpStatement(ast::JumpStatement::Return))
+        } else {
+            let return_expr = parse_expression(input)?;
+            input.expect(&ast::Token::Semicolon)?;
 
-        Ok(ast::Statement::JumpStatement(
-            ast::JumpStatement::ReturnWithValue(return_expr),
-        ))
+            Ok(ast::Statement::JumpStatement(
+                ast::JumpStatement::ReturnWithValue(return_expr),
+            ))
+        }
+    } else if input.peek() == Some(&ast::Token::Reserved(ast::ResWord::Int)) {
+        let declaration_type = parse_declaration_specifiers(input)?;
+        let (name, arguments) = parse_declarator(input)?;
+        if arguments.iter().next().is_some() {
+            unimplemented!("Parameters found in declaration statement");
+        }
+        if input.peek() == Some(&ast::Token::Semicolon) {
+            input.pop();
+            Ok(ast::Statement::Declaration(ast::DeclarationStatement::new(declaration_type, name)))
+        } else {
+            input.expect(&ast::Token::Equals)?;
+            let expression = parse_expression(input)?;
+            input.expect(&ast::Token::Semicolon)?;
+            Ok(ast::Statement::Declaration(ast::DeclarationStatement::new_with_expression(declaration_type, name, expression)))
+        }
+    } else {
+        unimplemented!("Unexpexted parse in parse_statement, found : {:?}", input.peek());
     }
 }
 

@@ -16,6 +16,7 @@ pub enum Token {
     Divide,
     Plus,
     Comma,
+    Equals
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -52,6 +53,14 @@ pub struct CompoundStatement {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
     JumpStatement(JumpStatement),
+    Declaration(DeclarationStatement)
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DeclarationStatement {
+    pub name: String,
+    pub decl_type: TypeDefinition,
+    pub expression: Option<Expression>
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -150,6 +159,24 @@ impl FunctionDefinition {
             return_type,
             parameter_list: parameters,
             compound_statement: body,
+        }
+    }
+}
+
+impl DeclarationStatement {
+    pub fn new(decl_type: TypeDefinition, name: String) -> DeclarationStatement {
+        DeclarationStatement {
+            decl_type,
+            name,
+            expression: None
+        }
+    }
+
+    pub fn new_with_expression(decl_type: TypeDefinition, name: String, expression: Expression) -> DeclarationStatement {
+        DeclarationStatement {
+            decl_type,
+            name,
+            expression: Some(expression)
         }
     }
 }
