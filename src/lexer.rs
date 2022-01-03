@@ -1,4 +1,31 @@
-use crate::{ast::{ResWord, Token}, stringiter::{CharPeekIt, Pos, StringIter}};
+use crate::{
+    ast::{ResWord, Token},
+    stringiter::StringIter,
+};
+
+pub trait CharPeekIt: Iterator<Item = char> {
+    fn peek(&mut self) -> Option<char>;
+    fn peek_peek(&mut self) -> Option<char>;
+    fn pos(&self) -> Pos;
+}
+
+#[derive(Clone, Debug)]
+pub struct Pos {
+    line: u32,
+    col: u32,
+}
+
+impl Pos {
+    pub fn new(line: u32, col: u32) -> Pos {
+        Pos { line, col }
+    }
+}
+
+impl Default for Pos {
+    fn default() -> Pos {
+        Pos::new(0, 0)
+    }
+}
 
 pub struct Lexer {
     source: Box<dyn CharPeekIt>,
@@ -13,10 +40,18 @@ pub struct Location {
 }
 
 impl Lexer {
+    #[allow(dead_code)]
     pub fn new_from_string(content: String) -> Lexer {
         Lexer {
             source: Box::new(StringIter::new(content)),
             filename: "raw_input_from_string.txt".to_owned(),
+        }
+    }
+
+    pub fn new(source: Box<dyn CharPeekIt>, filename: &str) -> Lexer {
+        Lexer {
+            source,
+            filename: filename.to_owned(),
         }
     }
 }
@@ -84,22 +119,20 @@ impl Lexer {
 
                         self.source.next();
                     }
-                },
-                (Some('/'), Some('/')) => {
-                    loop {
-                        let next = self.source.peek();
-                        if None == next {
-                            eprintln!("EOF while lexing comment");
-                            return Err("EOF while lexing comment");
-                        }
-                        if Some('\n') == next {
-                            self.source.next();
-                            break;
-                        }
-
-                        self.source.next();
-                    }
                 }
+                (Some('/'), Some('/')) => loop {
+                    let next = self.source.peek();
+                    if None == next {
+                        eprintln!("EOF while lexing comment");
+                        return Err("EOF while lexing comment");
+                    }
+                    if Some('\n') == next {
+                        self.source.next();
+                        break;
+                    }
+
+                    self.source.next();
+                },
                 _ => {
                     return Ok(());
                 }
@@ -120,7 +153,8 @@ impl Iterator for Lexer {
         let token = match &char {
             '{' | '}' | '(' | ')' => Token::Paren(char),
             ';' => Token::Semicolon,
-            '0' ..= '9' => {
+            ',' => Token::Comma,
+            '0'..='9' => {
                 let token = self.read_token(char, |c| c.is_numeric());
                 let value = token.parse::<i64>();
 
@@ -133,6 +167,7 @@ impl Iterator for Lexer {
             }
             '/' => Token::Divide,
             '+' => Token::Plus,
+            '=' => Token::Equals,
             _ => {
                 let token = self.read_token(char, |c| Lexer::is_ident(c));
                 if token == "int" {

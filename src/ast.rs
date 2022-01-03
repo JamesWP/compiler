@@ -15,17 +15,19 @@ pub enum Token {
     Semicolon,
     Divide,
     Plus,
+    Comma,
+    Equals
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TranslationUnit {
-    function_definitions: HashMap<String, FunctionDefinition>,
+    pub function_definitions: HashMap<String, FunctionDefinition>,
 }
 #[derive(Debug, Clone, PartialEq)]
 pub struct FunctionDefinition {
     return_type: TypeDefinition,
-    parameter_list: ParameterList,
-    compound_statement: CompoundStatement,
+    pub parameter_list: ParameterList,
+    pub compound_statement: CompoundStatement,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -40,16 +42,25 @@ pub enum BaseType {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypeDefinition {
-    base_type: BaseType,
+    pub base_type: BaseType,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct CompoundStatement {
     statements: Vec<Statement>,
 }
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
-    JumpStatement,
+    JumpStatement(JumpStatement),
+    Declaration(DeclarationStatement)
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DeclarationStatement {
+    pub name: String,
+    pub decl_type: TypeDefinition,
+    pub expression: Option<Expression>
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -61,10 +72,127 @@ pub enum JumpStatement {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expression {
     Additive(Box<Expression>, Box<Expression>),
-    Unary(LiteralValue),
+    Unary(Value),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Value {
+    Literal(LiteralValue),
+    Identifier(String)
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum LiteralValue {
     Int32(i32),
+}
+
+impl From<Vec<(TypeDefinition, String)>> for ParameterList {
+    fn from(parameters: Vec<(TypeDefinition, String)>) -> ParameterList {
+        ParameterList { parameters }
+    }
+}
+impl From<Vec<Statement>> for CompoundStatement {
+    fn from(statements: Vec<Statement>) -> CompoundStatement {
+        CompoundStatement { statements }
+    }
+}
+
+impl From<BaseType> for TypeDefinition {
+    fn from(base: BaseType) -> TypeDefinition {
+        TypeDefinition { base_type: base }
+    }
+}
+
+impl IntoIterator for CompoundStatement {
+    type Item = Statement;
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.statements.into_iter()
+    }
+}
+
+impl CompoundStatement {
+    pub fn iter(&self) -> std::slice::Iter<Statement> {
+        self.statements.iter()
+    }
+}
+
+impl ParameterList {
+    pub fn iter(&self) -> std::slice::Iter<(TypeDefinition, String)> {
+        self.parameters.iter()
+    }
+}
+
+impl Default for TranslationUnit {
+    fn default() -> TranslationUnit {
+        TranslationUnit {
+            function_definitions: HashMap::new(),
+        }
+    }
+}
+
+impl TranslationUnit {
+    pub fn add_definition(
+        &mut self,
+        name: &str,
+        definition: FunctionDefinition,
+    ) -> std::result::Result<(), &'static str> {
+        use std::collections::hash_map::Entry;
+        match self.function_definitions.entry(name.to_owned()) {
+            Entry::Vacant(entry) => {
+                entry.insert(definition);
+                Ok(())
+            }
+            Entry::Occupied(_) => Err("function redeclaration"),
+        }
+    }
+}
+
+impl FunctionDefinition {
+    pub fn new(
+        return_type: TypeDefinition,
+        parameters: ParameterList,
+        body: CompoundStatement,
+    ) -> FunctionDefinition {
+        FunctionDefinition {
+            return_type,
+            parameter_list: parameters,
+            compound_statement: body,
+        }
+    }
+}
+
+impl DeclarationStatement {
+    pub fn new(decl_type: TypeDefinition, name: String) -> DeclarationStatement {
+        DeclarationStatement {
+            decl_type,
+            name,
+            expression: None
+        }
+    }
+
+    pub fn new_with_expression(decl_type: TypeDefinition, name: String, expression: Expression) -> DeclarationStatement {
+        DeclarationStatement {
+            decl_type,
+            name,
+            expression: Some(expression)
+        }
+    }
+}
+
+impl ParameterList {
+    pub fn is_empty(&self) -> bool {
+        self.parameters.is_empty()
+    }
+}
+
+impl TypeDefinition {
+    pub fn size(&self) -> usize {
+        if self.base_type != BaseType::INT {
+            unimplemented!();
+        }
+
+        4
+    }
 }

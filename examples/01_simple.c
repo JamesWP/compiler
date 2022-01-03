@@ -3,6 +3,15 @@ int foo(int a) {
     return 0; // test comment
 }
 
+int function_with_two_args(int arg1, int arg2) {
+    return 1;
+}
+
+int function_with_max_integer_register_args(
+  int arg1, int arg2, int arg3, int arg4, int arg5, int arg6
+) {
+    return 1;
+}
 
 /*
 

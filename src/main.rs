@@ -1,137 +1,77 @@
-use object::write::{Object, SectionId, StandardSection, Symbol, SymbolSection};
-use object::{Architecture, BinaryFormat, Endianness, SymbolFlags, SymbolKind, SymbolScope};
-use std::fs::File;
-use std::io::{prelude::*, ErrorKind};
-use std::process::Command;
-use std::vec::Vec;
 
+mod ast;
+mod compiler;
+mod fileiter;
 mod lexer;
 mod parser;
+mod platform;
 mod stringiter;
-mod ast;
-
-fn compile() -> std::io::Result<object::write::Object> {
-    let mut object = Object::new(BinaryFormat::Elf, Architecture::X86_64, Endianness::Little);
-
-    let my_data_bytes = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
-    let data_section_id = object.section_id(StandardSection::Data);
-
-    let position =
-        object.append_section_data(data_section_id, &my_data_bytes[..], 1 /*allign*/);
-
-    let s_start = Symbol {
-        name: Vec::from("my_data_bytes_start"),
-        value: position,
-        size: 0,
-        kind: SymbolKind::Data,
-        scope: SymbolScope::Dynamic,
-        weak: false,
-        section: SymbolSection::Section(data_section_id),
-        flags: SymbolFlags::<SectionId>::None,
-    };
-
-    object.add_symbol(s_start);
-
-    let s_end = Symbol {
-        name: Vec::from("my_data_bytes_end"),
-        value: position + my_data_bytes.len() as u64,
-        size: 0,
-        kind: SymbolKind::Data,
-        scope: SymbolScope::Dynamic,
-        weak: false,
-        section: SymbolSection::Section(data_section_id),
-        flags: SymbolFlags::<SectionId>::None,
-    };
-
-    object.add_symbol(s_end);
-
-    Ok(object)
-}
-
-fn write(object: object::write::Object) -> std::io::Result<String> {
-    let name = "code.o";
-    let bytes = object.write().unwrap();
-
-    let mut file = File::create(name)?;
-
-    file.write_all(&bytes[..])?;
-
-    println!("Written {}", name);
-
-    Ok(name.to_owned())
-}
-
-fn link(objects: &[&str]) -> std::io::Result<String> {
-    let output_file = "app.tsk".to_owned();
-
-    let mut linker = Command::new("gcc")
-        .args(objects)
-        .args(["-lc", "-o", &output_file[..]])
-        .spawn()?;
-
-    let exit_code = linker.wait()?;
-
-    if !exit_code.success() {
-        return Err(std::io::Error::from(ErrorKind::InvalidData));
-    }
-
-    Ok(output_file)
-}
-
-fn dump(name: &str) -> std::io::Result<()> {
-    let mut output = Command::new("objdump")
-        .arg("-x")
-        .arg(std::path::Path::new(name).canonicalize()?)
-        .spawn()?;
-    let exit_code = output.wait()?;
-
-    if !exit_code.success() {
-        return Err(std::io::Error::from(ErrorKind::InvalidData));
-    }
-
-    Ok(())
-}
-
-fn run(name: &str) -> std::io::Result<()> {
-    let mut output = Command::new(std::path::Path::new(name).canonicalize()?).spawn()?;
-    let exit_code = output.wait()?;
-
-    if !exit_code.success() {
-        return Err(std::io::Error::from(ErrorKind::InvalidData));
-    }
-
-    println!("Success from running {}", name);
-
-    Ok(())
-}
-
-fn compile_c(file: &str) -> std::io::Result<String> {
-    let mut output = Command::new("gcc")
-        .arg("-c")
-        .args(["-o", "test.o"])
-        .arg(file)
-        .spawn()?;
-
-    let exit_code = output.wait()?;
-
-    if !exit_code.success() {
-        return Err(std::io::Error::from(ErrorKind::InvalidData));
-    }
-
-    println!("Compued driver {}", file);
-
-    Ok("test.o".to_owned())
-}
 
 fn main() -> std::io::Result<()> {
-    println!("Hello, world!");
+    let mut filename = "examples/01_simple.c".to_owned();
+    let mut output_filename = "a.S".to_owned();
 
-    let object = compile()?;
-    let object_name = write(object)?;
-    dump(&object_name)?;
-    let driver = compile_c("driver/test.c")?;
-    let output = link(&[&object_name, &driver])?;
-    run(&output[..])?;
+    let mut set_output = false;
+
+    let mut args = std::env::args().skip(1);
+
+    while let Some(arg) = args.next() {
+        if arg == "-o" {
+            set_output = true;
+            continue;
+        }
+        if set_output {
+            output_filename = arg;
+            set_output = false;
+        } else {
+            filename = arg;
+        }
+    }
+
+    println!("Reading {}", filename);
+
+    let file = fileiter::FileIter::from(std::fs::File::open(filename.clone())?);
+    let lexer = lexer::Lexer::new(Box::new(file), &filename);
+    let parser_input = lexer.map(|(_l, t)| t).collect::<Vec<_>>();
+    let translation_unit = parser::parse_translation_unit(&mut parser_input.into());
+
+    if translation_unit.is_err() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            translation_unit.err().unwrap(),
+        ));
+    }
+
+    let assembly = compiler::compile(&translation_unit.unwrap())?;
+
+    std::fs::write(output_filename.clone(), &assembly)?;
+
+    use std::io::Write;
+    std::io::stdout().write(assembly.as_bytes())?;
+
+    println!("Written to {}", output_filename);
+
+    let mut child = std::process::Command::new("as")
+        .arg("-")
+        .args(["-o", "a.out"])
+        .stdin(std::process::Stdio::piped())
+        .spawn()?;
+    child
+        .stdin
+        .as_mut()
+        .unwrap()
+        .write_all(assembly.as_bytes())?;
+
+    let exit = child.wait()?;
+
+    if !exit.success() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("Assembler exited with error {}", exit.code().unwrap_or(-1)),
+        ));
+    }
+
+    println!("Assembled to a.out");
 
     Ok(())
 }
