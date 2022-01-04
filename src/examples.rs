@@ -38,6 +38,10 @@ fn native_compile(source_file: &str, object_file: &str) -> bool {
     go("NATIVE CC", std::process::Command::new("gcc").arg("-c").arg(source_file).arg("-o").arg(object_file))
 }
 
+fn compile(source_file: &str, object_file: &str) -> bool {
+    go("COMPILER", std::process::Command::new(std::env::current_exe().unwrap().as_path().to_str().unwrap()).arg(source_file).arg("-o").arg(object_file))
+}
+
 fn link(executable_file: &str, object_files: &[String]) -> bool {
     go("LINK", std::process::Command::new("gcc").args(object_files).arg("-o").arg(executable_file))
 }
@@ -70,22 +74,31 @@ pub fn test() -> u32 {
     let mut has_failed = false;
 
     for (key, group) in &examples {
-        println!("Example {}", key);
+        let mut has_this_failed = false;
+        println!("=============================");
+        println!("======== Example {:02} =========", key);
 
-        println!("Building Reference");
+        println!("----------- Building REFERENCE");
 
-        let output = format!("{}/example_{}_ref", output_dir, key);
+        let output = format!("{}/example_{:02}_ref", output_dir, key);
+
+        let group: Vec<_> = group.collect();
 
         let mut objects = vec![];
-        for item in group {
+        for item in group.iter() {
             if let Some(base) = item.strip_suffix(".c") {
                 let object = format!("{}/{}.o", output_dir, base);
                 if !native_compile(&format!("examples/{}", item), &object) {
-                    has_failed = true;
+                    has_this_failed = true;
                     break;
                 }
                 objects.push(object);
             }
+        }
+
+        if has_this_failed {
+            has_failed = true;
+            continue;
         }
 
         if !link(&output, &objects) {
@@ -98,6 +111,42 @@ pub fn test() -> u32 {
             continue;
         }
         
+        println!("----------- Building TEST");
+
+        let output = format!("{}/example_{:02}_test", output_dir, key);
+
+        let mut objects = vec![];
+        for item in group.iter() {
+            if let Some(base) = item.strip_suffix(".c") {
+                let object = format!("{}/{}.o", output_dir, base);
+                if base.contains("driver") {
+                    if !native_compile(&format!("examples/{}", item), &object) {
+                        has_failed = true;
+                        break;
+                    }
+                } else {
+                    if !compile(&format!("examples/{}", item), &object) {
+                        has_failed = true;
+                        break;
+                    }
+                }
+                objects.push(object);
+            }
+        }
+
+        if has_failed {
+            continue;
+        }
+
+        if !link(&output, &objects) {
+            has_failed = true;
+            continue;
+        }
+
+        if !run(&output) {
+            has_failed = true;
+            continue;
+        }
         println!();
     }
 

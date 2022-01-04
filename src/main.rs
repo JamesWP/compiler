@@ -72,7 +72,7 @@ fn main() -> std::io::Result<()> {
 
     let mut child = std::process::Command::new("as")
         .arg("-")
-        .args(["-o", "a.out"])
+        .args(["-o", &output_filename])
         .stdin(std::process::Stdio::piped())
         .spawn()?;
     child
