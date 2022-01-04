@@ -7,3 +7,4 @@ edition = "2018"
 
 [dependencies]
 object = { version= "0.26.2", features= ["write"]}
+itertools = "0.10"

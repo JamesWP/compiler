@@ -6,6 +6,7 @@ mod lexer;
 mod parser;
 mod platform;
 mod stringiter;
+mod examples;
 
 fn main() -> std::io::Result<()> {
     let mut filename = "examples/01_simple.c".to_owned();
@@ -15,10 +16,15 @@ fn main() -> std::io::Result<()> {
 
     let mut args = std::env::args().skip(1);
 
+    let mut do_test = false;
+
     while let Some(arg) = args.next() {
         if arg == "-o" {
             set_output = true;
             continue;
+        }
+        if arg== "-t" {
+            do_test = true;
         }
         if set_output {
             output_filename = arg;
@@ -26,6 +32,19 @@ fn main() -> std::io::Result<()> {
         } else {
             filename = arg;
         }
+    }
+
+    if do_test {
+        println!("Doing tests!");
+
+        let result = examples::test();
+
+        if result == 0 {
+            return Ok(());
+        } else {
+            return Err(std::io::Error::new(std::io::ErrorKind::Other, "Testing failed"));
+        }
+
     }
 
     println!("Reading {}", filename);

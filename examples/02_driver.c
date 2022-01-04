@@ -19,5 +19,5 @@ int main(int argc, char* argv[]) {
         printf("return value is %d\n", return_value);
     }
 
-    return return_value;
+    return return_value == 579? 0: 1;
 }
