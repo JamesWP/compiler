@@ -2,7 +2,7 @@ use crate::ast;
 use std::fmt::Display;
 use std::collections::HashMap;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 #[allow(dead_code)]
 pub enum X86_64Reg {
     RAX,  // register a extended
@@ -50,10 +50,10 @@ pub struct StackRelativeLocation {
 }
 
 pub struct StackLayout {
-    stack_size: usize,
+    pub stack_size: usize,
     next_free_location: usize,
     allocated: Vec<ParameterInfo>,
-    lookup_map: HashMap<String, usize>
+    lookup_map: HashMap<String, usize>,
 }
 
 pub struct ParameterInfo {
@@ -94,17 +94,24 @@ pub struct Parameter {
 
 pub trait Operand: Display {
     fn is_memory(&self) -> bool;
+    fn reg(&self) -> Option<&X86_64Reg>;
 }
 
 impl Operand for X86_64Reg {
     fn is_memory(&self) -> bool {
         false
     }
+    fn reg(&self) -> Option<&X86_64Reg> {
+        Some(self)
+    }
 }
 
 impl Operand for StackRelativeLocation {
     fn is_memory(&self) -> bool {
         true
+    }
+    fn reg(&self) -> Option<&X86_64Reg> {
+        None
     }
 }
 
@@ -208,6 +215,13 @@ impl StackRelativeLocation {
             size,
         }
     }
+    pub fn stack_top() -> StackRelativeLocation {
+        StackRelativeLocation {
+            reg: X86_64Reg::RSP,
+            offset: 0,
+            size: 8
+        }
+    }
 }
 
 impl Display for StackRelativeLocation {
@@ -229,7 +243,7 @@ impl Default for StackLayout {
             stack_size: 0,
             next_free_location: 0,
             allocated: Vec::default(),
-            lookup_map: HashMap::default()
+            lookup_map: HashMap::default(),
         }
     }
 }

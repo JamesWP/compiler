@@ -112,7 +112,20 @@ fn parse_unary_expression(input: &mut ParserInput) -> ParseResult<ast::Expressio
 
 fn parse_postfix_expression(input: &mut ParserInput) -> ParseResult<ast::Expression> {
     let value = parse_primary_expression(input)?;
-    Ok(ast::Expression::Unary(value))
+    if input.peek() == Some(&ast::Token::Paren('[')) {
+        unimplemented!();
+    } else if input.peek() == Some(&ast::Token::Paren('(')) {
+        input.pop();
+        let argument_expressions = parse_argument_expression_list(input)?;
+        input.expect(&ast::Token::Paren(')'))?;
+        if let ast::Value::Identifier(value) = value {
+            Ok(ast::Expression::Call(value, argument_expressions))
+        } else {
+            Err(format!("Can't call a non identifier."))
+        }
+    } else {
+        Ok(ast::Expression::Unary(value))
+    }
 }
 
 fn parse_primary_expression(input: &mut ParserInput) -> ParseResult<ast::Value> {
@@ -128,6 +141,23 @@ fn parse_primary_expression(input: &mut ParserInput) -> ParseResult<ast::Value> 
             Ok(ast::Value::Identifier(value))
         }
         _ => Err(format!("Unable to parse primary expression. expected token found {:?}", input.peek())),
+    }
+}
+
+pub fn parse_argument_expression_list(input: &mut ParserInput) -> ParseResult<Vec<ast::Expression>> {
+    let mut args = vec![];
+    loop {
+        if input.peek() == Some(&ast::Token::Paren(')')) {
+            return Ok(args);
+        } 
+
+        let expr = parse_expression(input)?;
+        args.push(expr);
+
+        if input.peek() == Some(&ast::Token::Comma) {
+            input.pop();
+            continue;    
+        }
     }
 }
 
@@ -254,8 +284,6 @@ fn test_parse_translation_unit() {
     let parse_result = parse_translation_unit(&mut input.into());
 
     println!("{:#?}", parse_result);
-
-    assert_eq!(format!("{:#?}", parse_result), "");
 }
 #[test]
 fn test_parse_statement() {
@@ -269,7 +297,7 @@ fn test_parse_statement() {
 
     assert_eq!(
         format!("{:?}", parse_result),
-        "Ok(CompoundStatement { statements: [JumpStatement(ReturnWithValue(Unary(Int32(3))))] })"
+        "Ok(CompoundStatement { statements: [JumpStatement(ReturnWithValue(Unary(Literal(Int32(3)))))] })"
     );
 
     let mut input = vec![
@@ -294,7 +322,7 @@ fn test_parse_expression() {
     println!("Parse Result: {:?}", parse_result);
     assert_eq!(
         format!("{:?}", parse_result),
-        "Ok(Additive(Unary(Int32(1)), Unary(Int32(3))))"
+        "Ok(Additive(Unary(Literal(Int32(1))), Unary(Literal(Int32(3)))))"
     );
 
     let mut input = vec![
@@ -310,6 +338,6 @@ fn test_parse_expression() {
     println!("Parse Result: {:?}", parse_result);
     assert_eq!(
         format!("{:?}", parse_result),
-        "Ok(Additive(Additive(Unary(Int32(1)), Unary(Int32(3))), Unary(Int32(10))))"
+        "Ok(Additive(Additive(Unary(Literal(Int32(1))), Unary(Literal(Int32(3)))), Unary(Literal(Int32(10)))))"
     );
 }

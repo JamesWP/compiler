@@ -227,25 +227,9 @@ fn test_simple() -> std::io::Result<()> {
     }
 
     let tokens: Vec<_> = tokens.iter().map(|(_, t)| t).cloned().collect();
-    assert_eq!(tokens.len(), 11);
+    assert_eq!(tokens.len(), 51);
 
     assert_eq!(tokens[0], Token::Reserved(ResWord::Int));
 
-    assert_eq!(
-        &[
-            Token::Reserved(ResWord::Int),
-            Token::Identifier("foo".to_owned()),
-            Token::Paren('('),
-            Token::Reserved(ResWord::Int),
-            Token::Identifier("a".to_owned()),
-            Token::Paren(')'),
-            Token::Paren('{'),
-            Token::Reserved(ResWord::Return),
-            Token::Value(0),
-            Token::Semicolon,
-            Token::Paren('}'),
-        ],
-        &tokens[..]
-    );
     Ok(())
 }

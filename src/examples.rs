@@ -39,7 +39,7 @@ fn native_compile(source_file: &str, object_file: &str) -> bool {
 }
 
 fn compile(source_file: &str, object_file: &str) -> bool {
-    go("COMPILER", std::process::Command::new(std::env::current_exe().unwrap().as_path().to_str().unwrap()).arg(source_file).arg("-o").arg(object_file))
+    go("COMPILER", std::process::Command::new("cargo").arg("run").arg("--").arg(source_file).arg("-o").arg(object_file))
 }
 
 fn link(executable_file: &str, object_files: &[String]) -> bool {
@@ -50,7 +50,8 @@ fn run(executable_file: &str) -> bool {
     go("RUN", std::process::Command::new(executable_file).env_clear())
 }
 
-pub fn test() -> u32 {
+#[test]
+pub fn test() {
     let mut entries: Vec<_> = fs::read_dir("examples")
         .unwrap()
         .map(|res| res.map(|e|e.path()))
@@ -150,9 +151,5 @@ pub fn test() -> u32 {
         println!();
     }
 
-    if has_failed {
-        return 1;
-    } else {
-        return 0;
-    }
+    assert_eq!(has_failed, false);
 }

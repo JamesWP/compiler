@@ -73,6 +73,7 @@ pub enum JumpStatement {
 pub enum Expression {
     Additive(Box<Expression>, Box<Expression>),
     Unary(Value),
+    Call(String, Vec<Expression>)
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -115,6 +116,19 @@ impl IntoIterator for CompoundStatement {
 impl CompoundStatement {
     pub fn iter(&self) -> std::slice::Iter<Statement> {
         self.statements.iter()
+    }
+
+    pub fn visit_statements<F>(&self, f: &mut F) where 
+        F: FnMut(&Statement) -> () {
+        for statement in &self.statements {
+            f(statement);
+
+            // TODO: when statements can be nested, this needs to visit all of them!
+            match statement {
+                Statement::JumpStatement(_) => {},
+                Statement::Declaration(_) => {},
+            }
+        }
     }
 }
 
@@ -161,6 +175,25 @@ impl FunctionDefinition {
             compound_statement: body,
         }
     }
+
+    /// return just the names of the declarations in this function.
+    pub fn declarations(&self) -> Vec<(String, TypeDefinition)> {
+
+        let mut names = vec![];
+
+        let mut add_definition = |statement: &Statement| {
+            match statement {
+                Statement::Declaration(DeclarationStatement { name, decl_type, expression }) => {
+                    names.push((name.clone(), decl_type.clone()));
+                },
+                _ => {}
+            }
+        };
+
+        self.compound_statement.visit_statements(&mut add_definition);
+
+        names
+    } 
 }
 
 impl DeclarationStatement {
