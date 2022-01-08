@@ -16,18 +16,18 @@ pub enum Token {
     Divide,
     Plus,
     Comma,
-    Equals
+    Equals,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TranslationUnit {
-    pub function_definitions: HashMap<String, FunctionDefinition>,
+    pub function_definitions: Vec<(String, FunctionDefinition)>,
 }
 #[derive(Debug, Clone, PartialEq)]
 pub struct FunctionDefinition {
-    return_type: TypeDefinition,
+    pub return_type: TypeDefinition,
     pub parameter_list: ParameterList,
-    pub compound_statement: CompoundStatement,
+    pub compound_statement: Option<CompoundStatement>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -53,14 +53,14 @@ pub struct CompoundStatement {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
     JumpStatement(JumpStatement),
-    Declaration(DeclarationStatement)
+    Declaration(DeclarationStatement),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct DeclarationStatement {
     pub name: String,
     pub decl_type: TypeDefinition,
-    pub expression: Option<Expression>
+    pub expression: Option<Expression>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -73,13 +73,13 @@ pub enum JumpStatement {
 pub enum Expression {
     Additive(Box<Expression>, Box<Expression>),
     Unary(Value),
-    Call(String, Vec<Expression>)
+    Call(String, Vec<Expression>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Literal(LiteralValue),
-    Identifier(String)
+    Identifier(String),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -92,6 +92,13 @@ impl From<Vec<(TypeDefinition, String)>> for ParameterList {
         ParameterList { parameters }
     }
 }
+
+impl ParameterList {
+    pub fn len(&self) -> u32{
+        self.parameters.len() as u32
+    }
+}
+
 impl From<Vec<Statement>> for CompoundStatement {
     fn from(statements: Vec<Statement>) -> CompoundStatement {
         CompoundStatement { statements }
@@ -118,15 +125,17 @@ impl CompoundStatement {
         self.statements.iter()
     }
 
-    pub fn visit_statements<F>(&self, f: &mut F) where 
-        F: FnMut(&Statement) -> () {
+    pub fn visit_statements<F>(&self, f: &mut F)
+    where
+        F: FnMut(&Statement) -> (),
+    {
         for statement in &self.statements {
             f(statement);
 
             // TODO: when statements can be nested, this needs to visit all of them!
             match statement {
-                Statement::JumpStatement(_) => {},
-                Statement::Declaration(_) => {},
+                Statement::JumpStatement(_) => {}
+                Statement::Declaration(_) => {}
             }
         }
     }
@@ -141,25 +150,15 @@ impl ParameterList {
 impl Default for TranslationUnit {
     fn default() -> TranslationUnit {
         TranslationUnit {
-            function_definitions: HashMap::new(),
+            function_definitions: Vec::new(),
         }
     }
 }
 
 impl TranslationUnit {
-    pub fn add_definition(
-        &mut self,
-        name: &str,
-        definition: FunctionDefinition,
-    ) -> std::result::Result<(), &'static str> {
-        use std::collections::hash_map::Entry;
-        match self.function_definitions.entry(name.to_owned()) {
-            Entry::Vacant(entry) => {
-                entry.insert(definition);
-                Ok(())
-            }
-            Entry::Occupied(_) => Err("function redeclaration"),
-        }
+    pub fn add_definition(&mut self, name: &str, definition: FunctionDefinition) {
+        self.function_definitions
+            .push((name.to_owned(), definition));
     }
 }
 
@@ -172,28 +171,42 @@ impl FunctionDefinition {
         FunctionDefinition {
             return_type,
             parameter_list: parameters,
-            compound_statement: body,
+            compound_statement: Some(body),
+        }
+    }
+
+    pub fn new_declaration(
+        return_type: TypeDefinition,
+        parameters: ParameterList,
+    ) -> FunctionDefinition {
+        FunctionDefinition {
+            return_type,
+            parameter_list: parameters,
+            compound_statement: None,
         }
     }
 
     /// return just the names of the declarations in this function.
     pub fn declarations(&self) -> Vec<(String, TypeDefinition)> {
-
         let mut names = vec![];
 
-        let mut add_definition = |statement: &Statement| {
-            match statement {
-                Statement::Declaration(DeclarationStatement { name, decl_type, expression }) => {
-                    names.push((name.clone(), decl_type.clone()));
-                },
-                _ => {}
+        let mut add_definition = |statement: &Statement| match statement {
+            Statement::Declaration(DeclarationStatement {
+                name,
+                decl_type,
+                expression,
+            }) => {
+                names.push((name.clone(), decl_type.clone()));
             }
+            _ => {}
         };
 
-        self.compound_statement.visit_statements(&mut add_definition);
+        if let Some(statement) = &self.compound_statement {
+            statement.visit_statements(&mut add_definition);
+        }
 
         names
-    } 
+    }
 }
 
 impl DeclarationStatement {
@@ -201,15 +214,19 @@ impl DeclarationStatement {
         DeclarationStatement {
             decl_type,
             name,
-            expression: None
+            expression: None,
         }
     }
 
-    pub fn new_with_expression(decl_type: TypeDefinition, name: String, expression: Expression) -> DeclarationStatement {
+    pub fn new_with_expression(
+        decl_type: TypeDefinition,
+        name: String,
+        expression: Expression,
+    ) -> DeclarationStatement {
         DeclarationStatement {
             decl_type,
             name,
-            expression: Some(expression)
+            expression: Some(expression),
         }
     }
 }

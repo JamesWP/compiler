@@ -11,3 +11,21 @@ int bar(int b) {
     int c = blah();
     return a + b + c;
 }
+
+int a();
+
+int b() {
+    return a();   
+}
+
+int a() {
+    return 10;
+}
+
+int call_with_args() {
+    return bar(10);
+}
+
+int f() {
+    return bar(1+2);
+}

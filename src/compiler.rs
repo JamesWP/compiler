@@ -1,14 +1,16 @@
 use crate::ast;
-use crate::ast::TypeDefinition;
 use crate::platform;
 use crate::platform::X86_64Reg as reg;
 use crate::platform::DecimalLiteral as DL;
 use crate::platform::Operand;
+use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::fmt::Display;
 use std::fmt::Write;
 
 struct CompilationState {
     output: String,
+    declarations: HashMap<String, (ast::TypeDefinition, ast::ParameterList)>,
     function_stack_frame: Option<platform::StackLayout>
 }
 
@@ -16,7 +18,8 @@ impl Default for CompilationState {
     fn default() -> CompilationState {
         CompilationState {
             output: String::new(),
-            function_stack_frame: None
+            function_stack_frame: None,
+            declarations: HashMap::new()
         }
     }
 }
@@ -88,8 +91,40 @@ impl CompilationState {
         self.output_section("text")?;
         for func in &translation_unit.function_definitions {
             let (name, definition) = func;
-            let statement = &definition.compound_statement;
+
+
             let parameter_list = &definition.parameter_list;
+
+            match self.declarations.entry(name.to_owned()) {
+                Entry::Occupied(o) => {
+                    let (return_type, parameters) = o.get();
+
+                    if return_type != &definition.return_type {
+                        unimplemented!("Function redeclared with different return type. {}, {:?} different from {:?}", name, return_type, definition.return_type);
+                    }
+
+                    if parameters.len() != definition.parameter_list.len() {
+                        unimplemented!("Function redeclared with different number of arguments. {}, {} different from {}", name, parameters.len(), definition.parameter_list.len());
+                    }
+
+                    for (a, b) in parameters.iter().zip(definition.parameter_list.iter()) {
+                        if a.0 != b.0 {
+                            unimplemented!("Function redeclared with different type argument. {}, {:?} different from {:?}", name, a.0, b.0);
+                        }
+                    }
+                },
+                Entry::Vacant(e) => { 
+                    e.insert((definition.return_type.clone(), definition.parameter_list.clone()));
+                },
+            }
+
+            println!("{}, statement {:?}", name, definition.compound_statement);
+            if definition.compound_statement.is_none() {
+                // skip declaration
+                continue;
+            }
+
+            let statement = definition.compound_statement.as_ref().unwrap();
 
             self.output_newline()?;
             self.output_type(name, "function")?;
@@ -137,7 +172,9 @@ impl CompilationState {
 
             // Fix stack pointer
             let stack_size = self.function_stack_frame.as_ref().unwrap().stack_size;
-            assemble!(self, "subq", DL::new(stack_size as i32), reg::RSP);
+            if stack_size != 0 {
+                assemble!(self, "subq", DL::new(stack_size as i32), reg::RSP);
+            }
 
             for statement in statement.iter() {
                 self.compile_statement(statement)?;
@@ -161,7 +198,10 @@ impl CompilationState {
     fn compile_statement(&mut self, statement: &ast::Statement) -> std::io::Result<()> {
         match statement {
             ast::Statement::JumpStatement(ast::JumpStatement::Return) => {
-                assemble!(self, "movq", reg::RBP, reg::RSP);
+                let stack_size = self.function_stack_frame.as_ref().unwrap().stack_size;
+                if stack_size != 0 {
+                    assemble!(self, "movq", reg::RBP, reg::RSP);
+                }
                 // TODO: read information about all registers which need popping
                 assemble!(self, "popq", reg::RBP);
                 assemble!(self, "ret");
@@ -169,7 +209,10 @@ impl CompilationState {
             ast::Statement::JumpStatement(ast::JumpStatement::ReturnWithValue(s)) => {
                 // TODO: read information about all registers which need popping
                 self.compile_expression(s, &reg::EAX)?;
-                assemble!(self, "movq", reg::RBP, reg::RSP);
+                let stack_size = self.function_stack_frame.as_ref().unwrap().stack_size;
+                if stack_size != 0 {
+                    assemble!(self, "movq", reg::RBP, reg::RSP);
+                }
                 assemble!(self, "popq", reg::RBP);
                 assemble!(self, "ret");
             }
@@ -223,6 +266,10 @@ impl CompilationState {
             }
             ast::Expression::Call(a,args) => {
                 // TODO: check function types
+                if !self.declarations.contains_key(a) {
+                    unimplemented!("Function not defined {}", a);
+                }
+                
                 let mut param_place = platform::ParameterPlacement::default();
                
                 for arg in args {

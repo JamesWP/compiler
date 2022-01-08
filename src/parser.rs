@@ -166,7 +166,7 @@ pub fn parse_translation_unit(input: &mut ParserInput) -> ParseResult<ast::Trans
     while input.peek().is_some() {
         let func = parse_function_definition(input)?;
         let (name, def) = func;
-        translation_unit.add_definition(&name, def)?;
+        translation_unit.add_definition(&name, def);
     }
     Ok(translation_unit)
 }
@@ -176,12 +176,21 @@ fn parse_function_definition(
 ) -> ParseResult<(String, ast::FunctionDefinition)> {
     let declaration_specifiers = parse_declaration_specifiers(input)?;
     let (name, type_list) = parse_declarator(input)?;
-    let compound_statement = parse_compound_statement(input)?;
 
-    Ok((
-        name,
-        ast::FunctionDefinition::new(declaration_specifiers, type_list, compound_statement),
-    ))
+    if input.peek() == Some(&ast::Token::Paren('{')) {
+        let compound_statement = parse_compound_statement(input)?;
+        Ok((
+            name,
+            ast::FunctionDefinition::new(declaration_specifiers, type_list, compound_statement),
+        ))
+    } else {
+        input.expect(&ast::Token::Semicolon)?;
+        Ok((
+            name,
+            ast::FunctionDefinition::new_declaration(declaration_specifiers, type_list),
+        ))
+    }
+
 }
 
 fn parse_declaration_specifiers(input: &mut ParserInput) -> ParseResult<ast::TypeDefinition> {
