@@ -13,12 +13,17 @@ fn main() -> std::io::Result<()> {
     let mut output_filename = "a.S".to_owned();
 
     let mut set_output = false;
+    let mut print_lex = false;
 
     let mut args = std::env::args().skip(1);
 
     while let Some(arg) = args.next() {
         if arg == "-o" {
             set_output = true;
+            continue;
+        }
+        if arg == "-l" {
+            print_lex = true;
             continue;
         }
         if set_output {
@@ -33,7 +38,18 @@ fn main() -> std::io::Result<()> {
 
     let file = fileiter::FileIter::from(std::fs::File::open(filename.clone())?);
     let lexer = lexer::Lexer::new(Box::new(file), &filename);
+
+    if print_lex {
+        for (loc, toc) in lexer {
+            print!("[{:?}] ", toc);
+        }
+        println!("");
+
+        return Ok(());
+    }
+
     let parser_input = lexer.map(|(_l, t)| t).collect::<Vec<_>>();
+
     let translation_unit = parser::parse_translation_unit(&mut parser_input.into());
 
     if translation_unit.is_err() {

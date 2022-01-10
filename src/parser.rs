@@ -1,4 +1,4 @@
-use crate::ast;
+use crate::ast::{self};
 
 pub struct ParserInput {
     tokens: Vec<ast::Token>,
@@ -64,22 +64,20 @@ fn parse_statement(input: &mut ParserInput) -> ParseResult<ast::Statement> {
             ))
         }
     } else if input.peek() == Some(&ast::Token::Reserved(ast::ResWord::Int)) {
-        let declaration_type = parse_declaration_specifiers(input)?;
-        let (name, arguments) = parse_declarator(input)?;
-        if arguments.iter().next().is_some() {
-            unimplemented!("Parameters found in declaration statement");
-        }
+        let base_type = parse_declaration_specifiers(input)?;
+        let (name, decl_type) = parse_declarator(input, base_type)?;
         if input.peek() == Some(&ast::Token::Semicolon) {
             input.pop();
-            Ok(ast::Statement::Declaration(ast::DeclarationStatement::new(declaration_type, name)))
+            Ok(ast::Statement::Declaration(ast::DeclarationStatement::new(decl_type, name)))
         } else {
             input.expect(&ast::Token::Equals)?;
             let expression = parse_expression(input)?;
             input.expect(&ast::Token::Semicolon)?;
-            Ok(ast::Statement::Declaration(ast::DeclarationStatement::new_with_expression(declaration_type, name, expression)))
+            Ok(ast::Statement::Declaration(ast::DeclarationStatement::new_with_expression(decl_type, name, expression)))
         }
     } else {
-        unimplemented!("Unexpexted parse in parse_statement, found : {:?}", input.peek());
+        let expr = parse_expression(input)?;
+        Ok(ast::Statement::Expression(expr))
     }
 }
 
@@ -135,6 +133,11 @@ fn parse_primary_expression(input: &mut ParserInput) -> ParseResult<ast::Value> 
             input.pop();
             Ok(ast::Value::Literal(ast::LiteralValue::Int32 { 0: value as i32 }))
         },
+        Some(ast::Token::StringLiteral(v)) => {
+            let value = *v;
+            input.pop();
+            Ok(ast::Value::Literal(ast::LiteralValue::StringLabel {}))
+        }
         Some(ast::Token::Identifier(id)) => {
             let value = id.clone();
             input.pop();
@@ -174,23 +177,26 @@ pub fn parse_translation_unit(input: &mut ParserInput) -> ParseResult<ast::Trans
 fn parse_function_definition(
     input: &mut ParserInput,
 ) -> ParseResult<(String, ast::FunctionDefinition)> {
-    let declaration_specifiers = parse_declaration_specifiers(input)?;
-    let (name, type_list) = parse_declarator(input)?;
+    let base_type = parse_declaration_specifiers(input)?;
+    let (name, decl_type) = parse_declarator(input, base_type)?;
 
-    if input.peek() == Some(&ast::Token::Paren('{')) {
-        let compound_statement = parse_compound_statement(input)?;
-        Ok((
-            name,
-            ast::FunctionDefinition::new(declaration_specifiers, type_list, compound_statement),
-        ))
+    if let ast::TypeDefinition::FUNCTION(return_type, arguments) = decl_type {
+        if input.peek() == Some(&ast::Token::Paren('{')) {
+            let compound_statement = parse_compound_statement(input)?;
+            Ok((
+                name,
+                ast::FunctionDefinition::new(*return_type, arguments.into(), compound_statement),
+            ))
+        } else {
+            input.expect(&ast::Token::Semicolon)?;
+            Ok((
+                name,
+                ast::FunctionDefinition::new_declaration(*return_type, arguments.into()),
+            ))
+        }
     } else {
-        input.expect(&ast::Token::Semicolon)?;
-        Ok((
-            name,
-            ast::FunctionDefinition::new_declaration(declaration_specifiers, type_list),
-        ))
+        unimplemented!("Nope");
     }
-
 }
 
 fn parse_declaration_specifiers(input: &mut ParserInput) -> ParseResult<ast::TypeDefinition> {
@@ -198,31 +204,82 @@ fn parse_declaration_specifiers(input: &mut ParserInput) -> ParseResult<ast::Typ
 }
 
 fn parse_type_specifier(input: &mut ParserInput) -> ParseResult<ast::TypeDefinition> {
-    input.expect(&ast::Token::Reserved(ast::ResWord::Int))?;
-    Ok(ast::BaseType::INT.into())
+    let mut type_word = None;
+    let mut is_const = false;
+    loop {
+        match input.peek() {
+            Some(ast::Token::Reserved(ast::ResWord::Const)) => {
+                input.pop();
+                is_const = true;
+            }
+            Some(ast::Token::Reserved(ast::ResWord::Char)) |
+            Some(ast::Token::Reserved(ast::ResWord::Int)) => {
+                if let Some(x) = type_word {
+                    unimplemented!("Can't specify type twice, already specified as {:?}", x);
+                }
+                if let Some(ast::Token::Reserved(word)) = input.peek() {
+                    type_word = Some(word.clone());
+                    input.pop();
+                } else {
+                    unimplemented!("bad code");
+                }
+            }
+            _ => { break; }
+        }
+    }
+
+    match type_word {
+        Some(ast::ResWord::Int) => Ok(ast::TypeDefinition::INT(is_const.into())),
+        Some(ast::ResWord::Char) => Ok(ast::TypeDefinition::CHAR(is_const.into())),
+        None => Ok(ast::TypeDefinition::default()),
+        Some(_) => unimplemented!(),
+    }
 }
 
-fn parse_declarator(input: &mut ParserInput) -> ParseResult<(String, ast::ParameterList)> {
+fn parse_type_qualifier(input: &mut ParserInput) -> ParseResult<ast::TypeQualifier> {
+    let mut is_const = false;
+    while input.peek() == Some(&ast::Token::Reserved(ast::ResWord::Const)) {
+        input.pop();
+        is_const = true;
+    }
+
+    Ok(ast::TypeQualifier::from(is_const))
+}
+
+fn parse_declarator(input: &mut ParserInput, mut base_type: ast::TypeDefinition) -> ParseResult<(String, ast::TypeDefinition)> {
+    // parse pointers
+    while input.peek() == Some(&ast::Token::Star) {
+        input.pop();
+        let type_qualifier = parse_type_qualifier(input)?;
+        base_type = base_type.as_pointer_to(type_qualifier)
+    }
     let name = match input.peek() {
         Some(ast::Token::Identifier(x)) => {
             let x = x.to_owned();
             input.pop();
             x
         }
-        _ => return Err("expected declarator name".to_owned()),
+        _ => return Ok(("".to_owned(), base_type)),
     };
 
-    if input.peek() != Some(&ast::Token::Paren('(')) {
-        return Ok((name.to_owned(), Vec::new().into()));
-    }
+    let result = match input.peek() {
+        Some(&ast::Token::Paren('(')) => {
+            input.pop();
+            let parameter_list = parse_parameter_list(input)?;
 
-    input.expect(&ast::Token::Paren('('))?;
+            input.expect(&ast::Token::Paren(')'))?;
 
-    let parameter_list = parse_parameter_list(input)?;
+            base_type.as_function_taking(parameter_list)
+        }
+        Some(&ast::Token::Paren('[')) => {
+            input.pop();
+            input.expect(&ast::Token::Paren(']'))?;
+            base_type.as_pointer_to(false.into())
+        }
+        _ => base_type
+    };
 
-    input.expect(&ast::Token::Paren(')'))?;
-
-    Ok((name.to_owned(), parameter_list))
+    Ok((name, result))
 }
 
 fn parse_parameter_list(input: &mut ParserInput) -> ParseResult<ast::ParameterList> {
@@ -233,14 +290,15 @@ fn parse_parameter_list(input: &mut ParserInput) -> ParseResult<ast::ParameterLi
             break;
         }
 
-        let parameter_type = parse_declaration_specifiers(input)?;
-        let (name, param_type_list) = parse_declarator(input)?;
-
-        if !param_type_list.is_empty() {
-            unimplemented!("Funky function type in param list");
+        if input.peek() == Some(&ast::Token::Elipsis) {
+            input.pop();
+            let param_list: ast::ParameterList = param_list.into();
+            return Ok(param_list.with_var_args());
         }
+        let base_type = parse_declaration_specifiers(input)?;
+        let (name, decl_type) = parse_declarator(input, base_type)?;
 
-        param_list.push((parameter_type, name));
+        param_list.push((name, decl_type));
 
         if input.peek() == Some(&ast::Token::Comma) {
             input.pop().unwrap();

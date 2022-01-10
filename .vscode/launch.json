@@ -9,7 +9,7 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/target/debug/compiler",
-            "args": ["${workspaceFolder}/examples/04_functions.c"],
+            "args": ["${workspaceFolder}/examples/05_main.c"],
             "stopAtEntry": false,
             "cwd": "${fileDirname}",
             "environment": [],

@@ -151,7 +151,7 @@ impl Iterator for Lexer {
         let char = self.source.next()?;
 
         let token = match &char {
-            '{' | '}' | '(' | ')' => Token::Paren(char),
+            '{' | '}' | '(' | ')' | '[' | ']' => Token::Paren(char),
             ';' => Token::Semicolon,
             ',' => Token::Comma,
             '0'..='9' => {
@@ -165,13 +165,34 @@ impl Iterator for Lexer {
                     return None;
                 }
             }
+            '\"' => {
+                let token = self.read_token(char, |c| c != '\"');
+                if self.source.next() != Some('\"') {
+                    unimplemented!("Expected \" while lexing");
+                }
+                let token = &token.as_str()[1..];
+                Token::StringLiteral(token.to_owned())
+            }
             '/' => Token::Divide,
             '+' => Token::Plus,
             '=' => Token::Equals,
+            '*' => Token::Star,
+            '.' => {
+                let token = self.read_token(char, |c|c=='.');
+                if token == "..." {
+                    Token::Elipsis
+                } else {
+                    unimplemented!("single dot");
+                }
+            }
             _ => {
-                let token = self.read_token(char, |c| Lexer::is_ident(c));
+                let token = self.read_token(char, Lexer::is_ident);
                 if token == "int" {
                     Token::Reserved(ResWord::Int)
+                } else if token == "char" {
+                    Token::Reserved(ResWord::Char)
+                } else if token == "const" {
+                    Token::Reserved(ResWord::Const)
                 } else if token == "return" {
                     Token::Reserved(ResWord::Return)
                 } else {

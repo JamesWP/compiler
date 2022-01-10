@@ -144,9 +144,9 @@ impl CompilationState {
             let mut platform_abi = platform::ParameterPlacement::default();
 
             // Move all parameters to stack
-            for (stack_location, (param_type, _)) in self.function_stack_frame.as_ref().unwrap().iter().zip(parameter_list.iter()) {
+            for (stack_location, (_, decl_type)) in self.function_stack_frame.as_ref().unwrap().iter().zip(parameter_list.iter()) {
                 // calculate which register this parameter comes in
-                let param_location = platform_abi.place(param_type);
+                let param_location = platform_abi.place(decl_type);
 
                 // TODO: handle parameters which don't come in registers
                 let param_reg = param_location.reg.unwrap();
@@ -208,7 +208,7 @@ impl CompilationState {
             }
             ast::Statement::JumpStatement(ast::JumpStatement::ReturnWithValue(s)) => {
                 // TODO: read information about all registers which need popping
-                self.compile_expression(s, &reg::EAX)?;
+                self.compile_expression(s, Some(&reg::EAX))?;
                 let stack_size = self.function_stack_frame.as_ref().unwrap().stack_size;
                 if stack_size != 0 {
                     assemble!(self, "movq", reg::RBP, reg::RSP);
@@ -220,9 +220,12 @@ impl CompilationState {
                 let name = &declaration.name;
                 let location = self.function_stack_frame.as_ref().unwrap().get_location(name)?;
                 if let Some(e) = &declaration.expression {
-                    self.compile_expression(&e, &location)?;
+                    self.compile_expression(&e, Some(&location))?;
                 }
             }
+            ast::Statement::Expression(e) => {
+                self.compile_expression::<reg>(e, None)?;
+            },
         }
 
         Ok(())
@@ -231,7 +234,7 @@ impl CompilationState {
     fn compile_expression<Dest: Operand>(
         &mut self,
         expression: &ast::Expression,
-        destination: &Dest,
+        destination: Option<&Dest>,
     ) -> std::io::Result<()> {
         let scratch_register_64 = reg::RDI;
         let scratch_register_32 = reg::EDI;
@@ -239,29 +242,36 @@ impl CompilationState {
         match expression {
             ast::Expression::Additive(lhs, rhs) => {
                 self.compile_expression(lhs.as_ref(), destination)?;
-                
-                // store result of expression on stack temporarily
-                assemble!(self, "movl" , destination, scratch_register_32);
-                assemble!(self, "pushq", scratch_register_64);
+
+                if let Some(destination) = destination {
+                    // store result of expression on stack temporarily
+                    assemble!(self, "movl" , destination, scratch_register_32);
+                    assemble!(self, "pushq", scratch_register_64);
+                }
 
                 self.compile_expression(rhs, destination)?;
 
-                // retreive the value of the lhs
-                assemble!(self, "popq", scratch_register_64);
-
-                assemble!(self, "addl", scratch_register_32, destination);
+                if let Some(destination) = destination {
+                    // retreive the value of the lhs
+                    assemble!(self, "popq", scratch_register_64);
+                    assemble!(self, "addl", scratch_register_32, destination);
+                }
             }
             ast::Expression::Unary(ast::Value::Literal(ast::LiteralValue::Int32(value))) => {
-                assemble!(self, "movl", DL::new(value), destination);
+                if let Some(destination) = destination {
+                    assemble!(self, "movl", DL::new(value), destination);
+                }
             }
             ast::Expression::Unary(ast::Value::Identifier(name)) => {
                 let location = self.function_stack_frame.as_ref().unwrap().get_location(name)?;
-                if location.is_memory() && destination.is_memory() {
-                    // use scratch register to hold rhs value. as add can only have a single memory operand.
-                    assemble!(self, "movl", location, scratch_register_32);
-                    assemble!(self, "movl", scratch_register_32, destination);
-                } else {
-                    assemble!(self, "movl", location, destination);
+                if let Some(destination) = destination {
+                    if location.is_memory() && destination.is_memory() {
+                        // use scratch register to hold rhs value. as add can only have a single memory operand.
+                        assemble!(self, "movl", location, scratch_register_32);
+                        assemble!(self, "movl", scratch_register_32, destination);
+                    } else {
+                        assemble!(self, "movl", location, destination);
+                    }
                 }
             }
             ast::Expression::Call(a,args) => {
@@ -276,15 +286,18 @@ impl CompilationState {
                     let expr_type = compute_expression_type(arg);
                     let param = param_place.place(&expr_type);
                     if let Some(ref reg) = param.reg {
-                        self.compile_expression(arg, reg)?;
+                        self.compile_expression(arg, Some(reg))?;
                     } else {
                         unimplemented!();
                     }
                 }
                 // assemble call instruction
                 assemble!(self, "call", a);
-                if destination.is_memory() || destination.reg() != Some(&reg::EAX) {
-                    assemble!(self, "movl", reg::EAX, destination);
+
+                if let Some(destination) = destination {
+                    if destination.is_memory() || destination.reg() != Some(&reg::EAX) {
+                        assemble!(self, "movl", reg::EAX, destination);
+                    }
                 }
             }
         }
@@ -293,15 +306,16 @@ impl CompilationState {
 }
 
 fn compute_expression_type(expr: &ast::Expression) -> ast::TypeDefinition {
-    ast::BaseType::INT.into()
+    // TODO: implement this
+    ast::TypeDefinition::default()
 }
 
 fn compute_stack_layout_for_function(parameter_list: &ast::ParameterList) -> platform::StackLayout {
     let mut layout = platform::StackLayout::default();
     
-    for (type_def, name) in parameter_list.iter() {
-        let size_in_bytes = type_def.size();
-        layout.allocate(name, type_def, size_in_bytes);
+    for (name, decl_type) in parameter_list.iter() {
+        let size_in_bytes = decl_type.size();
+        layout.allocate(name, decl_type, size_in_bytes);
     }
 
     layout

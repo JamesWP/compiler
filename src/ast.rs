@@ -4,19 +4,23 @@ use std::collections::HashMap;
 pub enum ResWord {
     Return,
     Int,
+    Char,
+    Const
 }
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
-    //StringLiteral(String),
     Reserved(ResWord),
     Identifier(String),
     Paren(char),
     Value(i64),
+    StringLiteral(String),
     Semicolon,
     Divide,
     Plus,
     Comma,
     Equals,
+    Elipsis,
+    Star,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -32,17 +36,21 @@ pub struct FunctionDefinition {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParameterList {
-    parameters: Vec<(TypeDefinition, String)>,
+    parameters: Vec<(String, TypeDefinition)>,
+    pub var_args: bool
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum BaseType {
-    INT,
+pub struct TypeQualifier {
+    pub is_const: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct TypeDefinition {
-    pub base_type: BaseType,
+pub enum TypeDefinition {
+    INT(TypeQualifier),
+    CHAR(TypeQualifier),
+    FUNCTION(Box<TypeDefinition>, ParameterList),
+    POINTER(TypeQualifier, Box<TypeDefinition>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -54,6 +62,7 @@ pub struct CompoundStatement {
 pub enum Statement {
     JumpStatement(JumpStatement),
     Declaration(DeclarationStatement),
+    Expression(Expression),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -87,15 +96,26 @@ pub enum LiteralValue {
     Int32(i32),
 }
 
-impl From<Vec<(TypeDefinition, String)>> for ParameterList {
-    fn from(parameters: Vec<(TypeDefinition, String)>) -> ParameterList {
-        ParameterList { parameters }
+impl From<Vec<(String, TypeDefinition)>> for ParameterList {
+    fn from(parameters: Vec<(String, TypeDefinition)>) -> ParameterList {
+        ParameterList { parameters, var_args: false }
+    }
+}
+
+impl Into<Vec<(String, TypeDefinition)>> for ParameterList {
+    fn into(self) -> Vec<(String, TypeDefinition)> {
+        self.parameters
     }
 }
 
 impl ParameterList {
     pub fn len(&self) -> u32{
         self.parameters.len() as u32
+    }
+
+    pub fn with_var_args(mut self) -> Self {
+        self.var_args = true;
+        self
     }
 }
 
@@ -105,9 +125,9 @@ impl From<Vec<Statement>> for CompoundStatement {
     }
 }
 
-impl From<BaseType> for TypeDefinition {
-    fn from(base: BaseType) -> TypeDefinition {
-        TypeDefinition { base_type: base }
+impl Default for TypeDefinition {
+    fn default() -> Self {
+        TypeDefinition::INT(TypeQualifier::default())
     }
 }
 
@@ -136,13 +156,14 @@ impl CompoundStatement {
             match statement {
                 Statement::JumpStatement(_) => {}
                 Statement::Declaration(_) => {}
+                Statement::Expression(_) => {}
             }
         }
     }
 }
 
 impl ParameterList {
-    pub fn iter(&self) -> std::slice::Iter<(TypeDefinition, String)> {
+    pub fn iter(&self) -> std::slice::Iter<(String, TypeDefinition)> {
         self.parameters.iter()
     }
 }
@@ -151,6 +172,22 @@ impl Default for TranslationUnit {
     fn default() -> TranslationUnit {
         TranslationUnit {
             function_definitions: Vec::new(),
+        }
+    }
+}
+
+impl Default for TypeQualifier {
+    fn default() -> Self {
+        TypeQualifier {
+            is_const: false
+        }
+    }
+}
+
+impl From<bool> for TypeQualifier {
+    fn from(is_const: bool) -> Self {
+        TypeQualifier {
+            is_const
         }
     }
 }
@@ -239,10 +276,19 @@ impl ParameterList {
 
 impl TypeDefinition {
     pub fn size(&self) -> usize {
-        if self.base_type != BaseType::INT {
-            unimplemented!();
+        match self {
+            TypeDefinition::INT(_) => 4,
+            TypeDefinition::CHAR(_) => 1,
+            TypeDefinition::FUNCTION(_, _) => 8,
+            TypeDefinition::POINTER(_, _) => 8,
         }
+    }
 
-        4
+    pub fn as_function_taking(self, args: ParameterList) -> Self {
+        TypeDefinition::FUNCTION(Box::new(self), args)
+    }
+
+    pub fn as_pointer_to(self, specifiers: TypeQualifier) -> Self {
+        TypeDefinition::POINTER(specifiers, Box::new(self))
     }
 }

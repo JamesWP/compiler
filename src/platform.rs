@@ -179,13 +179,14 @@ impl Default for ParameterPlacement {
 impl ParameterPlacement {
     pub fn place(&mut self, param_type: &ast::TypeDefinition) -> Parameter {
         match param_type {
-            ast::TypeDefinition {
-                base_type: ast::BaseType::INT,
-            } => {
+            ast::TypeDefinition::INT(_)|
+            ast::TypeDefinition::CHAR(_) => {
                 let reg = INTEGER_32_REGISTER_ORDER[self.num_integer_args].clone();
                 self.num_integer_args += 1;
                 Parameter::new(reg)
-            }
+            },
+            ast::TypeDefinition::FUNCTION(_, _)|
+            ast::TypeDefinition::POINTER(_, _) => todo!(),
         }
     }
 }
