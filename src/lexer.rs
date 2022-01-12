@@ -171,6 +171,8 @@ impl Iterator for Lexer {
                     unimplemented!("Expected \" while lexing");
                 }
                 let token = &token.as_str()[1..];
+                let token = token.to_owned();
+                let token = token.replace("\\n", "\n");
                 Token::StringLiteral(token.to_owned())
             }
             '/' => Token::Divide,

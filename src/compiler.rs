@@ -315,7 +315,14 @@ impl CompilationState {
                 if !self.declarations.contains_key(a) {
                     unimplemented!("Function not defined {}", a);
                 }
-                
+
+                let declaration = &self.declarations[a];
+                let call_is_vararg = if let ast::TypeDefinition::FUNCTION(_, params) = declaration {
+                  params.var_args
+                } else { 
+                  false
+                };
+
                 let mut param_place = platform::ParameterPlacement::default();
                
                 for arg in args {
@@ -327,6 +334,11 @@ impl CompilationState {
                         unimplemented!();
                     }
                 }
+                //TODO: if is var arg, and fpu is used, calculate number of fpu regs used
+                if call_is_vararg {
+                  assemble!(self, "xor", reg::EAX, reg::EAX);
+                }      
+          
                 // assemble call instruction
                 assemble!(self, "call", format!("{}@PLT",a));
 

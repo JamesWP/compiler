@@ -1,7 +1,7 @@
-int puts(const char*);
+int printf(const char*, ...);
 
 int main(int argc, char* argv[]) {
-    int blah = puts("Hello World!\n");
+    int blah = printf("Hello World!\n");
     return 0;
 }
 
@@ -12,7 +12,7 @@ declaration_specifier: int const
 declarator:
     pointer: * const
     direct_declarator: [main]
-        parameter_list: 
+        parameter_list:
             - parameter: int argc
 
 
@@ -26,11 +26,11 @@ declarator:
 
 
 type:
-    int: 
+    int:
         - is_const bool
     char:
         - is_const bool
-    function: 
+    function:
         - return_type type
         - argument_list vec[type]
     pointer:
