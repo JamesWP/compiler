@@ -12,7 +12,9 @@ impl ParserInput {
         self.tokens.last()
     }
     fn pop(&mut self) -> Option<ast::Token> {
-        self.tokens.pop()
+        let t = self.tokens.pop();
+        println!("Token {:?}", t);
+        t
     }
     fn expect(&mut self, token: &ast::Token) -> Result<(), String> {
         if self.peek() == Some(token) {
@@ -77,6 +79,7 @@ fn parse_statement(input: &mut ParserInput) -> ParseResult<ast::Statement> {
         }
     } else {
         let expr = parse_expression(input)?;
+        input.expect(&ast::Token::Semicolon)?;
         Ok(ast::Statement::Expression(expr))
     }
 }
@@ -134,9 +137,9 @@ fn parse_primary_expression(input: &mut ParserInput) -> ParseResult<ast::Value> 
             Ok(ast::Value::Literal(ast::LiteralValue::Int32 { 0: value as i32 }))
         },
         Some(ast::Token::StringLiteral(v)) => {
-            let value = *v;
+            let value = v.clone();
             input.pop();
-            Ok(ast::Value::Literal(ast::LiteralValue::StringLabel {}))
+            Ok(ast::Value::Literal(ast::LiteralValue::StringLiteral(value)))
         }
         Some(ast::Token::Identifier(id)) => {
             let value = id.clone();

@@ -1,7 +1,7 @@
-int printf(const char*, ...);
+int puts(const char*);
 
 int main(int argc, char* argv[]) {
-    printf("Hello World!\n");
+    int blah = puts("Hello World!\n");
     return 0;
 }
 

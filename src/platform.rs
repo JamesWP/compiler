@@ -186,10 +186,24 @@ impl ParameterPlacement {
                 Parameter::new(reg)
             },
             ast::TypeDefinition::FUNCTION(_, _)|
-            ast::TypeDefinition::POINTER(_, _) => todo!(),
+            ast::TypeDefinition::POINTER(_, _) => {
+                let reg = INTEGER_64_REGISTER_ORDER[self.num_integer_args].clone();
+                self.num_integer_args += 1;
+                Parameter::new(reg)
+            },
         }
     }
 }
+
+pub fn return_reg(decl_type: &ast::TypeDefinition) -> X86_64Reg {
+    match decl_type {
+        ast::TypeDefinition::INT(_) => X86_64Reg::EAX,
+        ast::TypeDefinition::CHAR(_) => todo!(),
+        ast::TypeDefinition::FUNCTION(_, _) => todo!(),
+        ast::TypeDefinition::POINTER(_, _) => X86_64Reg::RAX,
+    }
+}
+
 impl ParameterInfo {
     pub fn new(
         name: &str,
@@ -203,8 +217,8 @@ impl ParameterInfo {
         }
     }
 
-    pub fn is_32_bit(&self) -> bool {
-        true
+    pub fn size(&self) -> usize {
+        self.param_type.size()
     }
 }
 
@@ -214,13 +228,6 @@ impl StackRelativeLocation {
             reg: X86_64Reg::RBP,
             offset,
             size,
-        }
-    }
-    pub fn stack_top() -> StackRelativeLocation {
-        StackRelativeLocation {
-            reg: X86_64Reg::RSP,
-            offset: 0,
-            size: 8
         }
     }
 }
@@ -257,13 +264,11 @@ impl StackLayout {
 
         let location_in_stack = 0 - self.next_free_location as i32;
 
-        // TODO: worry about allignment
-        if size_in_bytes != 4 {
-            unimplemented!();
+        if (size_in_bytes & (size_in_bytes - 1)) != 0 {
+            unimplemented!("cant allocate non multiple of 2 sized space in stack");
         }
-        if (self.next_free_location & 0x3) != 0 {
-            unimplemented!();
-        }
+
+        self.next_free_location = (self.next_free_location + size_in_bytes - 1) / size_in_bytes * size_in_bytes;
 
         let allocation = StackRelativeLocation::new(location_in_stack, size_in_bytes);
         let param_info = ParameterInfo::new(name, type_def, allocation.clone());

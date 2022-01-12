@@ -94,6 +94,7 @@ pub enum Value {
 #[derive(Debug, Clone, PartialEq)]
 pub enum LiteralValue {
     Int32(i32),
+    StringLiteral(String)
 }
 
 impl From<Vec<(String, TypeDefinition)>> for ParameterList {

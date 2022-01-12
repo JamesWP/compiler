@@ -8,6 +8,8 @@ mod platform;
 mod stringiter;
 mod examples;
 
+mod intern;
+
 fn main() -> std::io::Result<()> {
     let mut filename = "examples/01_simple.c".to_owned();
     let mut output_filename = "a.S".to_owned();
