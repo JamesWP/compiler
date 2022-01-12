@@ -328,7 +328,7 @@ impl CompilationState {
                     }
                 }
                 // assemble call instruction
-                assemble!(self, "call", a);
+                assemble!(self, "call", format!("{}@PLT",a));
 
                 if let Some(destination) = destination {
                     if destination.is_memory() || destination.reg() != Some(&reg::EAX) {
