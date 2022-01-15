@@ -3,7 +3,7 @@ use std::fs;
 use itertools::Itertools;
 
 fn go(name: &str, command: &mut std::process::Command) -> bool {
-    let args: Vec<_> = command.get_args().map(|os|os.to_string_lossy().to_string()).collect();
+    let args: Vec<_> = command.get_args().map(|os|format!("{:?}", os.to_string_lossy().to_string())).collect();
     let program = command.get_program().to_string_lossy().to_string();
 
     let result = if let Ok(output) = command.output() {
@@ -20,7 +20,7 @@ fn go(name: &str, command: &mut std::process::Command) -> bool {
     };
 
 
-    println!("[{:<10}] {}: {} {:?}", name, if result.is_ok() { "SUCCESS"} else {"FAILED"}, program, args);
+    println!("[{:<10}] {}: {} {}", name, if result.is_ok() { "SUCCESS"} else {"FAILED"}, program, args.join(" "));
 
     if let Err((ref stdout, ref stderr)) = result {
         for line in stdout.lines() {
@@ -39,7 +39,7 @@ fn native_compile(source_file: &str, object_file: &str) -> bool {
 }
 
 fn compile(source_file: &str, object_file: &str) -> bool {
-    go("COMPILER", std::process::Command::new("cargo").arg("run").arg("--").arg(source_file).arg("-o").arg(object_file))
+    go("COMPILER", std::process::Command::new("target/debug/compiler").arg(source_file).arg("-o").arg(object_file))
 }
 
 fn link(executable_file: &str, object_files: &[String]) -> bool {
@@ -52,6 +52,8 @@ fn run(executable_file: &str) -> bool {
 
 #[test]
 pub fn test() {
+    assert!(go("BUILD", std::process::Command::new("cargo").arg("build")));
+
     let mut entries: Vec<_> = fs::read_dir("examples")
         .unwrap()
         .map(|res| res.map(|e|e.path()))
@@ -135,7 +137,8 @@ pub fn test() {
             }
         }
 
-        if has_failed {
+        if has_this_failed {
+            has_failed = true;
             continue;
         }
 
