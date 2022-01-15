@@ -3,7 +3,7 @@ int printf(const char*, ...);
 int main(int argc, char* argv[]) {
     int blah = printf("Hello World!\n");
 
-    printf("Passing args to printf! %s %i", "string", 12);
+    printf("Passing args to printf! %s %i", "string", blah);
     return 0;
 }
 
