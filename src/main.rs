@@ -52,7 +52,7 @@ fn main() -> std::io::Result<()> {
 
     let parser_input = lexer.map(|(_l, t)| t).collect::<Vec<_>>();
 
-    let translation_unit = parser::parse_translation_unit(&mut parser_input.into());
+    let translation_unit = parser::ParserState::new(parser_input.into()).parse_translation_unit();
 
     if translation_unit.is_err() {
         return Err(std::io::Error::new(

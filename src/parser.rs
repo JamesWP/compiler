@@ -4,6 +4,10 @@ pub struct ParserInput {
     tokens: Vec<ast::Token>,
 }
 
+pub struct ParserState {
+    input: ParserInput,
+}
+
 // TODO: result error should point at error position
 type ParseResult<T> = std::result::Result<T, String>;
 
@@ -37,302 +41,309 @@ impl From<Vec<ast::Token>> for ParserInput {
     }
 }
 
-#[allow(dead_code)]
-fn parse_statement_list(input: &mut ParserInput) -> ParseResult<ast::CompoundStatement> {
-    let mut statements = Vec::new();
-    statements.push(parse_statement(input)?);
-
-    loop {
-        if Some(&ast::Token::Reserved(ast::ResWord::Return)) != input.peek() {
-            return Ok(statements.into());
-        }
-
-        statements.push(parse_statement(input)?);
-    }
-}
-
-fn parse_statement(input: &mut ParserInput) -> ParseResult<ast::Statement> {
-    
-    if input.peek() == Some(&ast::Token::Reserved(ast::ResWord::Return)) {
-        input.pop();
-        if input.peek() == Some(&ast::Token::Semicolon) {
-            Ok(ast::Statement::JumpStatement(ast::JumpStatement::Return))
-        } else {
-            let return_expr = parse_expression(input)?;
-            input.expect(&ast::Token::Semicolon)?;
-
-            Ok(ast::Statement::JumpStatement(
-                ast::JumpStatement::ReturnWithValue(return_expr),
-            ))
-        }
-    } else if input.peek() == Some(&ast::Token::Reserved(ast::ResWord::Int)) {
-        let base_type = parse_declaration_specifiers(input)?;
-        let (name, decl_type) = parse_declarator(input, base_type)?;
-        if input.peek() == Some(&ast::Token::Semicolon) {
-            input.pop();
-            Ok(ast::Statement::Declaration(ast::DeclarationStatement::new(decl_type, name)))
-        } else {
-            input.expect(&ast::Token::Equals)?;
-            let expression = parse_expression(input)?;
-            input.expect(&ast::Token::Semicolon)?;
-            Ok(ast::Statement::Declaration(ast::DeclarationStatement::new_with_expression(decl_type, name, expression)))
-        }
-    } else {
-        let expr = parse_expression(input)?;
-        input.expect(&ast::Token::Semicolon)?;
-        Ok(ast::Statement::Expression(expr))
-    }
-}
-
-fn parse_expression(input: &mut ParserInput) -> ParseResult<ast::Expression> {
-    parse_additive_expression(input)
-}
-
-fn parse_additive_expression(input: &mut ParserInput) -> ParseResult<ast::Expression> {
-    let mut unary_expression = parse_unary_expression(input)?;
-
-    loop {
-        if Some(&ast::Token::Plus) != input.peek() {
-            return Ok(unary_expression);
-        }
-
-        input.pop();
-
-        let next_unary = parse_unary_expression(input)?;
-
-        unary_expression = ast::Expression::Additive {
-            0: Box::new(unary_expression),
-            1: Box::new(next_unary),
-        };
-    }
-}
-
-fn parse_unary_expression(input: &mut ParserInput) -> ParseResult<ast::Expression> {
-    parse_postfix_expression(input)
-}
-
-fn parse_postfix_expression(input: &mut ParserInput) -> ParseResult<ast::Expression> {
-    let value = parse_primary_expression(input)?;
-    if input.peek() == Some(&ast::Token::Paren('[')) {
-        unimplemented!();
-    } else if input.peek() == Some(&ast::Token::Paren('(')) {
-        input.pop();
-        let argument_expressions = parse_argument_expression_list(input)?;
-        input.expect(&ast::Token::Paren(')'))?;
-        if let ast::Value::Identifier(value) = value {
-            Ok(ast::Expression::Call(value, argument_expressions))
-        } else {
-            Err(format!("Can't call a non identifier."))
-        }
-    } else {
-        Ok(ast::Expression::Unary(value))
-    }
-}
-
-fn parse_primary_expression(input: &mut ParserInput) -> ParseResult<ast::Value> {
-    match input.peek() {
-        Some(ast::Token::Value(v)) => {
-            let value = *v;
-            input.pop();
-            Ok(ast::Value::Literal(ast::LiteralValue::Int32 { 0: value as i32 }))
-        },
-        Some(ast::Token::StringLiteral(v)) => {
-            let value = v.clone();
-            input.pop();
-            Ok(ast::Value::Literal(ast::LiteralValue::StringLiteral(value)))
-        }
-        Some(ast::Token::Identifier(id)) => {
-            let value = id.clone();
-            input.pop();
-            Ok(ast::Value::Identifier(value))
-        }
-        _ => Err(format!("Unable to parse primary expression. expected token found {:?}", input.peek())),
-    }
-}
-
-pub fn parse_argument_expression_list(input: &mut ParserInput) -> ParseResult<Vec<ast::Expression>> {
-    let mut args = vec![];
-    loop {
-        if input.peek() == Some(&ast::Token::Paren(')')) {
-            return Ok(args);
+impl ParserState {
+    pub fn new(input: ParserInput) -> ParserState {
+        ParserState {
+            input
         } 
+    }
 
-        let expr = parse_expression(input)?;
-        args.push(expr);
+    #[allow(dead_code)]
+    fn parse_statement_list(&mut self) -> ParseResult<ast::CompoundStatement> {
+        let mut statements = Vec::new();
+        statements.push(self.parse_statement()?);
 
-        if input.peek() == Some(&ast::Token::Comma) {
-            input.pop();
-            continue;    
+        loop {
+            if Some(&ast::Token::Reserved(ast::ResWord::Return)) != self.input.peek() {
+                return Ok(statements.into());
+            }
+
+            statements.push(self.parse_statement()?);
         }
     }
-}
 
-pub fn parse_translation_unit(input: &mut ParserInput) -> ParseResult<ast::TranslationUnit> {
-    let mut translation_unit = ast::TranslationUnit::default();
-    while input.peek().is_some() {
-        let func = parse_function_definition(input)?;
-        let (name, def) = func;
-        translation_unit.add_definition(&name, def);
-    }
-    Ok(translation_unit)
-}
+    fn parse_statement(&mut self) -> ParseResult<ast::Statement> {
+        if self.input.peek() == Some(&ast::Token::Reserved(ast::ResWord::Return)) {
+            self.input.pop();
+            if self.input.peek() == Some(&ast::Token::Semicolon) {
+                Ok(ast::Statement::JumpStatement(ast::JumpStatement::Return))
+            } else {
+                let return_expr = self.parse_expression()?;
+                self.input.expect(&ast::Token::Semicolon)?;
 
-fn parse_function_definition(
-    input: &mut ParserInput,
-) -> ParseResult<(String, ast::FunctionDefinition)> {
-    let base_type = parse_declaration_specifiers(input)?;
-    let (name, decl_type) = parse_declarator(input, base_type)?;
-
-    if let ast::TypeDefinition::FUNCTION(return_type, arguments) = decl_type {
-        if input.peek() == Some(&ast::Token::Paren('{')) {
-            let compound_statement = parse_compound_statement(input)?;
-            Ok((
-                name,
-                ast::FunctionDefinition::new(*return_type, arguments.into(), compound_statement),
-            ))
+                Ok(ast::Statement::JumpStatement(
+                    ast::JumpStatement::ReturnWithValue(return_expr),
+                ))
+            }
+        } else if self.input.peek() == Some(&ast::Token::Reserved(ast::ResWord::Int)) {
+            let base_type = self.parse_declaration_specifiers()?;
+            let (name, decl_type) = self.parse_declarator(base_type)?;
+            if self.input.peek() == Some(&ast::Token::Semicolon) {
+                self.input.pop();
+                Ok(ast::Statement::Declaration(ast::DeclarationStatement::new(decl_type, name)))
+            } else {
+                self.input.expect(&ast::Token::Equals)?;
+                let expression = self.parse_expression()?;
+                self.input.expect(&ast::Token::Semicolon)?;
+                Ok(ast::Statement::Declaration(ast::DeclarationStatement::new_with_expression(decl_type, name, expression)))
+            }
         } else {
-            input.expect(&ast::Token::Semicolon)?;
-            Ok((
-                name,
-                ast::FunctionDefinition::new_declaration(*return_type, arguments.into()),
-            ))
+            let expr = self.parse_expression()?;
+            self.input.expect(&ast::Token::Semicolon)?;
+            Ok(ast::Statement::Expression(expr))
         }
-    } else {
-        unimplemented!("Nope");
     }
-}
 
-fn parse_declaration_specifiers(input: &mut ParserInput) -> ParseResult<ast::TypeDefinition> {
-    parse_type_specifier(input)
-}
+    fn parse_expression(&mut self) -> ParseResult<ast::Expression> {
+        self.parse_additive_expression()
+    }
 
-fn parse_type_specifier(input: &mut ParserInput) -> ParseResult<ast::TypeDefinition> {
-    let mut type_word = None;
-    let mut is_const = false;
-    loop {
-        match input.peek() {
-            Some(ast::Token::Reserved(ast::ResWord::Const)) => {
-                input.pop();
-                is_const = true;
+    fn parse_additive_expression(&mut self) -> ParseResult<ast::Expression> {
+        let mut unary_expression = self.parse_unary_expression()?;
+
+        loop {
+            if Some(&ast::Token::Plus) != self.input.peek() {
+                return Ok(unary_expression);
             }
-            Some(ast::Token::Reserved(ast::ResWord::Char)) |
-            Some(ast::Token::Reserved(ast::ResWord::Int)) => {
-                if let Some(x) = type_word {
-                    unimplemented!("Can't specify type twice, already specified as {:?}", x);
-                }
-                if let Some(ast::Token::Reserved(word)) = input.peek() {
-                    type_word = Some(word.clone());
-                    input.pop();
-                } else {
-                    unimplemented!("bad code");
-                }
+
+            self.input.pop();
+
+            let next_unary = self.parse_unary_expression()?;
+
+            unary_expression = ast::Expression::Additive {
+                0: Box::new(unary_expression),
+                1: Box::new(next_unary),
+            };
+        }
+    }
+
+    fn parse_unary_expression(&mut self) -> ParseResult<ast::Expression> {
+        self.parse_postfix_expression()
+    }
+
+    fn parse_postfix_expression(&mut self) -> ParseResult<ast::Expression> {
+        let value = self.parse_primary_expression()?;
+        if self.input.peek() == Some(&ast::Token::Paren('[')) {
+            unimplemented!();
+        } else if self.input.peek() == Some(&ast::Token::Paren('(')) {
+            self.input.pop();
+            let argument_expressions = self.parse_argument_expression_list()?;
+            self.input.expect(&ast::Token::Paren(')'))?;
+            if let ast::Value::Identifier(value) = value {
+                Ok(ast::Expression::Call(value, argument_expressions))
+            } else {
+                Err(format!("Can't call a non identifier."))
             }
-            _ => { break; }
+        } else {
+            Ok(ast::Expression::Unary(value))
         }
     }
 
-    match type_word {
-        Some(ast::ResWord::Int) => Ok(ast::TypeDefinition::INT(is_const.into())),
-        Some(ast::ResWord::Char) => Ok(ast::TypeDefinition::CHAR(is_const.into())),
-        None => Ok(ast::TypeDefinition::default()),
-        Some(_) => unimplemented!(),
-    }
-}
-
-fn parse_type_qualifier(input: &mut ParserInput) -> ParseResult<ast::TypeQualifier> {
-    let mut is_const = false;
-    while input.peek() == Some(&ast::Token::Reserved(ast::ResWord::Const)) {
-        input.pop();
-        is_const = true;
-    }
-
-    Ok(ast::TypeQualifier::from(is_const))
-}
-
-fn parse_declarator(input: &mut ParserInput, mut base_type: ast::TypeDefinition) -> ParseResult<(String, ast::TypeDefinition)> {
-    // parse pointers
-    while input.peek() == Some(&ast::Token::Star) {
-        input.pop();
-        let type_qualifier = parse_type_qualifier(input)?;
-        base_type = base_type.as_pointer_to(type_qualifier)
-    }
-    let name = match input.peek() {
-        Some(ast::Token::Identifier(x)) => {
-            let x = x.to_owned();
-            input.pop();
-            x
+    fn parse_primary_expression(&mut self) -> ParseResult<ast::Value> {
+        match self.input.peek() {
+            Some(ast::Token::Value(v)) => {
+                let value = *v;
+                self.input.pop();
+                Ok(ast::Value::Literal(ast::LiteralValue::Int32 { 0: value as i32 }))
+            },
+            Some(ast::Token::StringLiteral(v)) => {
+                let value = v.clone();
+                self.input.pop();
+                Ok(ast::Value::Literal(ast::LiteralValue::StringLiteral(value)))
+            }
+            Some(ast::Token::Identifier(id)) => {
+                let value = id.clone();
+                self.input.pop();
+                Ok(ast::Value::Identifier(value))
+            }
+            _ => Err(format!("Unable to parse primary expression. expected token found {:?}", self.input.peek())),
         }
-        _ => return Ok(("".to_owned(), base_type)),
-    };
-
-    let result = match input.peek() {
-        Some(&ast::Token::Paren('(')) => {
-            input.pop();
-            let parameter_list = parse_parameter_list(input)?;
-
-            input.expect(&ast::Token::Paren(')'))?;
-
-            base_type.as_function_taking(parameter_list)
-        }
-        Some(&ast::Token::Paren('[')) => {
-            input.pop();
-            input.expect(&ast::Token::Paren(']'))?;
-            base_type.as_pointer_to(false.into())
-        }
-        _ => base_type
-    };
-
-    Ok((name, result))
-}
-
-fn parse_parameter_list(input: &mut ParserInput) -> ParseResult<ast::ParameterList> {
-    let mut param_list = Vec::new();
-
-    loop {
-        if input.peek() == Some(&ast::Token::Paren(')')) {
-            break;
-        }
-
-        if input.peek() == Some(&ast::Token::Elipsis) {
-            input.pop();
-            let param_list: ast::ParameterList = param_list.into();
-            return Ok(param_list.with_var_args());
-        }
-        let base_type = parse_declaration_specifiers(input)?;
-        let (name, decl_type) = parse_declarator(input, base_type)?;
-
-        param_list.push((name, decl_type));
-
-        if input.peek() == Some(&ast::Token::Comma) {
-            input.pop().unwrap();
-            continue;
-        }
-
-        if input.peek() == Some(&ast::Token::Paren(')')) {
-            break;
-        }
-
-        return Err(format!(
-            "Expected comma or close paren, instead got {:?}",
-            input.peek()
-        ));
     }
 
-    Ok(param_list.into())
-}
+    pub fn parse_argument_expression_list(&mut self) -> ParseResult<Vec<ast::Expression>> {
+        let mut args = vec![];
+        loop {
+            if self.input.peek() == Some(&ast::Token::Paren(')')) {
+                return Ok(args);
+            } 
 
-fn parse_compound_statement(input: &mut ParserInput) -> ParseResult<ast::CompoundStatement> {
-    input.expect(&ast::Token::Paren('{'))?;
+            let expr = self.parse_expression()?;
+            args.push(expr);
 
-    let mut statements = Vec::new();
-    while input.peek() != Some(&ast::Token::Paren('}')) {
-        let statement = parse_statement(input)?;
-        statements.push(statement);
+            if self.input.peek() == Some(&ast::Token::Comma) {
+                self.input.pop();
+                continue;    
+            }
+        }
     }
 
-    input.expect(&ast::Token::Paren('}'))?;
+    pub fn parse_translation_unit(&mut self) -> ParseResult<ast::TranslationUnit> {
+        let mut translation_unit = ast::TranslationUnit::default();
+        while self.input.peek().is_some() {
+            let func = self.parse_function_definition()?;
+            let (name, def) = func;
+            translation_unit.add_definition(&name, def);
+        }
+        Ok(translation_unit)
+    }
 
-    Ok(statements.into())
+    fn parse_function_definition(
+        &mut self,
+    ) -> ParseResult<(String, ast::FunctionDefinition)> {
+        let base_type = self.parse_declaration_specifiers()?;
+        let (name, decl_type) = self.parse_declarator(base_type)?;
+
+        if let ast::TypeDefinition::FUNCTION(return_type, arguments) = decl_type {
+            if self.input.peek() == Some(&ast::Token::Paren('{')) {
+                let compound_statement = self.parse_compound_statement()?;
+                Ok((
+                    name,
+                    ast::FunctionDefinition::new(*return_type, arguments.into(), compound_statement),
+                ))
+            } else {
+                self.input.expect(&ast::Token::Semicolon)?;
+                Ok((
+                    name,
+                    ast::FunctionDefinition::new_declaration(*return_type, arguments.into()),
+                ))
+            }
+        } else {
+            unimplemented!("Nope");
+        }
+    }
+
+    fn parse_declaration_specifiers(&mut self) -> ParseResult<ast::TypeDefinition> {
+        self.parse_type_specifier()
+    }
+
+    fn parse_type_specifier(&mut self) -> ParseResult<ast::TypeDefinition> {
+        let mut type_word = None;
+        let mut is_const = false;
+        loop {
+            match self.input.peek() {
+                Some(ast::Token::Reserved(ast::ResWord::Const)) => {
+                    self.input.pop();
+                    is_const = true;
+                }
+                Some(ast::Token::Reserved(ast::ResWord::Char)) |
+                Some(ast::Token::Reserved(ast::ResWord::Int)) => {
+                    if let Some(x) = type_word {
+                        unimplemented!("Can't specify type twice, already specified as {:?}", x);
+                    }
+                    if let Some(ast::Token::Reserved(word)) = self.input.peek() {
+                        type_word = Some(word.clone());
+                        self.input.pop();
+                    } else {
+                        unimplemented!("bad code");
+                    }
+                }
+                _ => { break; }
+            }
+        }
+
+        match type_word {
+            Some(ast::ResWord::Int) => Ok(ast::TypeDefinition::INT(is_const.into())),
+            Some(ast::ResWord::Char) => Ok(ast::TypeDefinition::CHAR(is_const.into())),
+            None => Ok(ast::TypeDefinition::default()),
+            Some(_) => unimplemented!(),
+        }
+    }
+
+    fn parse_type_qualifier(&mut self) -> ParseResult<ast::TypeQualifier> {
+        let mut is_const = false;
+        while self.input.peek() == Some(&ast::Token::Reserved(ast::ResWord::Const)) {
+            self.input.pop();
+            is_const = true;
+        }
+
+        Ok(ast::TypeQualifier::from(is_const))
+    }
+
+    fn parse_declarator(&mut self, mut base_type: ast::TypeDefinition) -> ParseResult<(String, ast::TypeDefinition)> {
+        // parse pointers
+        while self.input.peek() == Some(&ast::Token::Star) {
+            self.input.pop();
+            let type_qualifier = self.parse_type_qualifier()?;
+            base_type = base_type.as_pointer_to(type_qualifier)
+        }
+        let name = match self.input.peek() {
+            Some(ast::Token::Identifier(x)) => {
+                let x = x.to_owned();
+                self.input.pop();
+                x
+            }
+            _ => return Ok(("".to_owned(), base_type)),
+        };
+
+        let result = match self.input.peek() {
+            Some(&ast::Token::Paren('(')) => {
+                self.input.pop();
+                let parameter_list = self.parse_parameter_list()?;
+
+                self.input.expect(&ast::Token::Paren(')'))?;
+
+                base_type.as_function_taking(parameter_list)
+            }
+            Some(&ast::Token::Paren('[')) => {
+                self.input.pop();
+                self.input.expect(&ast::Token::Paren(']'))?;
+                base_type.as_pointer_to(false.into())
+            }
+            _ => base_type
+        };
+
+        Ok((name, result))
+    }
+
+    fn parse_parameter_list(&mut self) -> ParseResult<ast::ParameterList> {
+        let mut param_list = Vec::new();
+
+        loop {
+            if self.input.peek() == Some(&ast::Token::Paren(')')) {
+                break;
+            }
+
+            if self.input.peek() == Some(&ast::Token::Elipsis) {
+                self.input.pop();
+                let param_list: ast::ParameterList = param_list.into();
+                return Ok(param_list.with_var_args());
+            }
+            let base_type = self.parse_declaration_specifiers()?;
+            let (name, decl_type) = self.parse_declarator(base_type)?;
+
+            param_list.push((name, decl_type));
+
+            if self.input.peek() == Some(&ast::Token::Comma) {
+                self.input.pop().unwrap();
+                continue;
+            }
+
+            if self.input.peek() == Some(&ast::Token::Paren(')')) {
+                break;
+            }
+
+            return Err(format!(
+                "Expected comma or close paren, instead got {:?}",
+                self.input.peek()
+            ));
+        }
+
+        Ok(param_list.into())
+    }
+
+    fn parse_compound_statement(&mut self) -> ParseResult<ast::CompoundStatement> {
+        self.input.expect(&ast::Token::Paren('{'))?;
+
+        let mut statements = Vec::new();
+        while self.input.peek() != Some(&ast::Token::Paren('}')) {
+            let statement = self.parse_statement()?;
+            statements.push(statement);
+        }
+
+        self.input.expect(&ast::Token::Paren('}'))?;
+
+        Ok(statements.into())
+    }
 }
 
 #[test]
@@ -351,7 +362,7 @@ fn test_parse_translation_unit() {
         ast::Token::Paren('}'),
     ];
 
-    let parse_result = parse_translation_unit(&mut input.into());
+    let parse_result = ParserState::new(input.into()).parse_translation_unit();
 
     println!("{:#?}", parse_result);
 }
@@ -363,7 +374,7 @@ fn test_parse_statement() {
         ast::Token::Semicolon,
     ];
 
-    let parse_result = parse_statement_list(&mut input.into());
+    let parse_result = ParserState::new(input.into()).parse_statement_list();
 
     assert_eq!(
         format!("{:?}", parse_result),
@@ -375,7 +386,7 @@ fn test_parse_statement() {
         ast::Token::Semicolon,
     ];
 
-    let parse_result = parse_statement_list(&mut input.into());
+    let parse_result = ParserState::new(input.into()).parse_statement_list();
 
     assert_eq!(
         format!("{:?}", parse_result),
@@ -387,7 +398,7 @@ fn test_parse_statement() {
 fn test_parse_expression() {
     let mut input = vec![ast::Token::Value(1), ast::Token::Plus, ast::Token::Value(3)];
 
-    let parse_result = parse_expression(&mut input.into());
+    let parse_result = ParserState::new(input.into()).parse_expression();
 
     println!("Parse Result: {:?}", parse_result);
     assert_eq!(
@@ -403,7 +414,7 @@ fn test_parse_expression() {
         ast::Token::Value(10),
     ];
 
-    let parse_result = parse_expression(&mut input.into());
+    let parse_result = ParserState::new(input.into()).parse_expression();
 
     println!("Parse Result: {:?}", parse_result);
     assert_eq!(

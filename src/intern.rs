@@ -43,7 +43,6 @@ impl Intern {
         }
     }
 
-
     pub fn get_labels(&self) -> Vec<(Label, String)> {
         self.map.iter().map(|(data, label)| {
             (label.clone(), data.clone())
