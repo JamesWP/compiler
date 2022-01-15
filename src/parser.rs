@@ -41,6 +41,19 @@ impl From<Vec<ast::Token>> for ParserInput {
     }
 }
 
+fn is_type_decl(token: Option<&ast::Token>) -> bool {
+    match token {
+        Some(x) => match x {
+            Token::Reserved(r) => match r {
+                ast::ResWord::Return => false,
+                ast::ResWord::Int | ast::ResWord::Char | ast::ResWord::Const => true,
+            },
+            _ => false
+        },
+        None => false,
+    }
+}
+
 impl ParserState {
     pub fn new(input: ParserInput) -> ParserState {
         ParserState {
@@ -75,7 +88,7 @@ impl ParserState {
                     ast::JumpStatement::ReturnWithValue(return_expr),
                 ))
             }
-        } else if self.input.peek() == Some(&ast::Token::Reserved(ast::ResWord::Int)) {
+        } else if is_type_decl(self.input.peek()) {
             let base_type = self.parse_declaration_specifiers()?;
             let (name, decl_type) = self.parse_declarator(base_type)?;
             if self.input.peek() == Some(&ast::Token::Semicolon) {
