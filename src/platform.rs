@@ -185,7 +185,7 @@ impl ParameterPlacement {
                 self.num_integer_args += 1;
                 Parameter::new(reg)
             },
-            ast::TypeDefinition::FUNCTION(_, _)|
+            ast::TypeDefinition::FUNCTION(_, _, _)|
             ast::TypeDefinition::POINTER(_, _) => {
                 let reg = INTEGER_64_REGISTER_ORDER[self.num_integer_args].clone();
                 self.num_integer_args += 1;
@@ -199,7 +199,7 @@ pub fn return_reg(decl_type: &ast::TypeDefinition) -> X86_64Reg {
     match decl_type {
         ast::TypeDefinition::INT(_) => X86_64Reg::EAX,
         ast::TypeDefinition::CHAR(_) => todo!(),
-        ast::TypeDefinition::FUNCTION(_, _) => todo!(),
+        ast::TypeDefinition::FUNCTION(_, _, _) => todo!(),
         ast::TypeDefinition::POINTER(_, _) => X86_64Reg::RAX,
     }
 }

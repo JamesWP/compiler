@@ -11,7 +11,6 @@ use std::fmt::Write;
 
 struct CompilationState {
     output: String,
-    declarations: HashMap<String, ast::TypeDefinition>,
     function_stack_frame: Option<platform::StackLayout>,
     pub intern: intern::Intern
 }
@@ -21,7 +20,6 @@ impl Default for CompilationState {
         CompilationState {
             output: String::new(),
             function_stack_frame: None,
-            declarations: HashMap::new(),
             intern: intern::Intern::new(),
         }
     }
@@ -114,31 +112,6 @@ impl CompilationState {
 
             let parameter_list = &definition.parameter_list;
 
-            match self.declarations.entry(name.to_owned()) {
-                Entry::Occupied(o) => {
-                    let decl_type = o.get();
-
-                    if let ast::TypeDefinition::FUNCTION(return_type, parameters) = decl_type {
-                        if return_type.as_ref() != &definition.return_type {
-                            unimplemented!("Function redeclared with different return type. {}, {:?} different from {:?}", name, return_type, definition.return_type);
-                        }
-
-                        if parameters.len() != definition.parameter_list.len() {
-                            unimplemented!("Function redeclared with different number of arguments. {}, {} different from {}", name, parameters.len(), definition.parameter_list.len());
-                        }
-
-                        for (a, b) in parameters.iter().zip(definition.parameter_list.iter()) {
-                            if a.0 != b.0 {
-                                unimplemented!("Function redeclared with different type argument. {}, {:?} different from {:?}", name, a.0, b.0);
-                            }
-                        }
-                    }
-                },
-                Entry::Vacant(e) => { 
-                    e.insert(definition.return_type.clone().as_function_taking(definition.parameter_list.clone()));
-                },
-            }
-
             println!("{}, statement {:?}", name, definition.compound_statement);
             if definition.compound_statement.is_none() {
                 // skip declaration
@@ -192,12 +165,6 @@ impl CompilationState {
                 let (name, type_def) = declaration;
                 let size = type_def.size();
                 self.function_stack_frame.as_mut().unwrap().allocate(&name, &type_def, size);
-                match self.declarations.entry(name) {
-                    Entry::Occupied(_) => todo!(),
-                    Entry::Vacant(e) => {
-                        e.insert(type_def);
-                    },
-                }
             }
 
             // Fix stack pointer
@@ -268,9 +235,9 @@ impl CompilationState {
     ) -> std::io::Result<()> {
         let scratch_register_64 = reg::RDI;
         let scratch_register_32 = reg::EDI;
-
-        match expression {
-            ast::Expression::Additive(lhs, rhs) => {
+        dbg!(expression);
+        match &expression.node {
+            ast::ExpressionNode::Binary(op, lhs, rhs) => {
                 self.compile_expression(lhs.as_ref(), destination)?;
 
                 if let Some(destination) = destination {
@@ -279,45 +246,61 @@ impl CompilationState {
                     assemble!(self, "pushq", scratch_register_64);
                 }
 
-                self.compile_expression(rhs, destination)?;
+                self.compile_expression(&rhs, destination)?;
 
                 if let Some(destination) = destination {
                     // retreive the value of the lhs
                     assemble!(self, "popq", scratch_register_64);
-                    assemble!(self, "addl", scratch_register_32, destination);
-                }
-            }
-            ast::Expression::Unary(ast::Value::Literal(ast::LiteralValue::Int32(value))) => {
-                if let Some(destination) = destination {
-                    assemble!(self, "movl", DL::new(value), destination);
-                }
-            }
-            ast::Expression::Unary(ast::Value::Literal(ast::LiteralValue::StringLiteral(value))) => {
-                if let Some(destination) = destination {
-                    let label = self.intern.add(value);
-                    assemble!(self, "lea", format!("{}(%rip)", label), destination);
-                }
-            }
-            ast::Expression::Unary(ast::Value::Identifier(name)) => {
-                let location = self.function_stack_frame.as_ref().unwrap().get_location(name)?;
-                if let Some(destination) = destination {
-                    if location.is_memory() && destination.is_memory() {
-                        // use scratch register to hold rhs value. as add can only have a single memory operand.
-                        assemble!(self, "movl", location, scratch_register_32);
-                        assemble!(self, "movl", scratch_register_32, destination);
-                    } else {
-                        assemble!(self, "movl", location, destination);
+
+                    match op {
+                        ast::BinOp::Sum => {
+                            assemble!(self, "addl", scratch_register_32, destination);
+                        },
                     }
                 }
             }
-            ast::Expression::Call(a,args) => {
-                // TODO: check function types
-                if !self.declarations.contains_key(a) {
-                    unimplemented!("Function not defined {}", a);
+            ast::ExpressionNode::Value(v) => {
+                match v {
+                    ast::Value::Literal(l) => {
+                        match l {
+                            ast::LiteralValue::Int32(value) => {
+                                if let Some(destination) = destination {
+                                    assemble!(self, "movl", DL::new(value), destination);
+                                }
+                            },
+                            ast::LiteralValue::StringLiteral(value) => {
+                                if let Some(destination) = destination {
+                                    let label = self.intern.add(&value);
+                                    assemble!(self, "lea", format!("{}(%rip)", label), destination);
+                                }
+                            },
+                        }
+                    },
+                    ast::Value::Identifier(name) => {
+                        if let Some(destination) = destination {
+                            if let ast::TypeDefinition::FUNCTION(_,_,is_local) = expression.expr_type {
+                                if is_local {
+                                    assemble!(self, "lea", format!("{}(%rip)", name), destination);
+                                } else {
+                                    assemble!(self, "mov", format!("{}@GOTPCREL(%rip)", name), destination);
+                                }
+                            } else {
+                                let location = self.function_stack_frame.as_ref().unwrap().get_location(&name)?;
+                                if location.is_memory() && destination.is_memory() {
+                                    // use scratch register to hold rhs value. as add can only have a single memory operand.
+                                    assemble!(self, "movl", location, scratch_register_32);
+                                    assemble!(self, "movl", scratch_register_32, destination);
+                                } else {
+                                    assemble!(self, "movl", location, destination);
+                                }
+                            }
+                        }
+                    },
                 }
-
-                let declaration = &self.declarations[a];
-                let call_is_vararg = if let ast::TypeDefinition::FUNCTION(_, params) = declaration {
+            }
+            ast::ExpressionNode::Call(lhs,args) => {
+                // TODO: check function types
+                let call_is_vararg = if let ast::TypeDefinition::FUNCTION(_, params, _) = &expression.expr_type {
                   params.var_args
                 } else { 
                   false
@@ -326,21 +309,23 @@ impl CompilationState {
                 let mut param_place = platform::ParameterPlacement::default();
                
                 for arg in args {
-                    let expr_type = compute_expression_type(arg);
-                    let param = param_place.place(&expr_type);
+                    let param = param_place.place(&arg.expr_type);
                     if let Some(ref reg) = param.reg {
-                        self.compile_expression(arg, Some(reg))?;
+                        self.compile_expression(&arg, Some(reg))?;
                     } else {
                         unimplemented!();
                     }
                 }
+          
+                // assemble call instruction
+                self.compile_expression(lhs.as_ref(), Some(&reg::RBX))?;
+
                 //TODO: if is var arg, and fpu is used, calculate number of fpu regs used
                 if call_is_vararg {
                   assemble!(self, "xor", reg::EAX, reg::EAX);
                 }      
-          
-                // assemble call instruction
-                assemble!(self, "call", format!("{}@PLT",a));
+
+                assemble!(self, "call", format!("*{}",reg::RBX));
 
                 if let Some(destination) = destination {
                     if destination.is_memory() || destination.reg() != Some(&reg::EAX) {
@@ -350,29 +335,6 @@ impl CompilationState {
             }
         }
         Ok(())
-    }
-}
-
-fn compute_expression_type(expr: &ast::Expression) -> ast::TypeDefinition {
-    match expr {
-        ast::Expression::Additive(a, b) => {
-            let a_type = compute_expression_type(a);
-            let b_type = compute_expression_type(b);
-
-            if a_type == b_type {
-                compute_expression_type(a)
-            } else {
-                unimplemented!();
-            }
-        },
-        ast::Expression::Unary(v) => match v {
-            ast::Value::Literal(v) => match v {
-                ast::LiteralValue::Int32(_) => ast::TypeDefinition::INT(false.into()), /* this dosen't make sense, why is type spec needed here? */
-                ast::LiteralValue::StringLiteral(_) => ast::TypeDefinition::POINTER(false.into(), Box::new(ast::TypeDefinition::CHAR(false.into()))),
-            },
-            ast::Value::Identifier(_) => todo!(),
-        },
-        ast::Expression::Call(_, _) => todo!(),
     }
 }
 

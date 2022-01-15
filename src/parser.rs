@@ -1,4 +1,6 @@
-use crate::ast::{self};
+use std::ops::Deref;
+
+use crate::{ast::{self, Token, TypeQualifier}, scope::Scope};
 
 pub struct ParserInput {
     tokens: Vec<ast::Token>,
@@ -6,6 +8,7 @@ pub struct ParserInput {
 
 pub struct ParserState {
     input: ParserInput,
+    scope: Scope,
 }
 
 // TODO: result error should point at error position
@@ -57,7 +60,8 @@ fn is_type_decl(token: Option<&ast::Token>) -> bool {
 impl ParserState {
     pub fn new(input: ParserInput) -> ParserState {
         ParserState {
-            input
+            input,
+            scope: Scope::default()
         } 
     }
 
@@ -91,6 +95,7 @@ impl ParserState {
         } else if is_type_decl(self.input.peek()) {
             let base_type = self.parse_declaration_specifiers()?;
             let (name, decl_type) = self.parse_declarator(base_type)?;
+            self.scope.define(&name, &decl_type);
             if self.input.peek() == Some(&ast::Token::Semicolon) {
                 self.input.pop();
                 Ok(ast::Statement::Declaration(ast::DeclarationStatement::new(decl_type, name)))
@@ -123,10 +128,7 @@ impl ParserState {
 
             let next_unary = self.parse_unary_expression()?;
 
-            unary_expression = ast::Expression::Additive {
-                0: Box::new(unary_expression),
-                1: Box::new(next_unary),
-            };
+            unary_expression = ast::Expression::new_binop(ast::BinOp::Sum, unary_expression.into(), next_unary.into());
         }
     }
 
@@ -138,39 +140,47 @@ impl ParserState {
         let value = self.parse_primary_expression()?;
         if self.input.peek() == Some(&ast::Token::Paren('[')) {
             unimplemented!();
-        } else if self.input.peek() == Some(&ast::Token::Paren('(')) {
-            self.input.pop();
-            let argument_expressions = self.parse_argument_expression_list()?;
-            self.input.expect(&ast::Token::Paren(')'))?;
-            if let ast::Value::Identifier(value) = value {
-                Ok(ast::Expression::Call(value, argument_expressions))
-            } else {
-                Err(format!("Can't call a non identifier."))
-            }
-        } else {
-            Ok(ast::Expression::Unary(value))
         }
+        if self.input.peek() != Some(&ast::Token::Paren('(')) {
+            return Ok(value);
+        }
+
+        // this is a function call. e.g. blah(1,2,3+4)
+        let function_expr = value;
+        self.input.pop();
+        let argument_expressions = self.parse_argument_expression_list()?;
+        self.input.expect(&ast::Token::Paren(')'))?;
+
+        Ok(ast::Expression::new_call(function_expr.into(), argument_expressions))
     }
 
-    fn parse_primary_expression(&mut self) -> ParseResult<ast::Value> {
-        match self.input.peek() {
+    fn parse_primary_expression(&mut self) -> ParseResult<ast::Expression> {
+        let (value, expr_type) = match self.input.peek() {
             Some(ast::Token::Value(v)) => {
                 let value = *v;
                 self.input.pop();
-                Ok(ast::Value::Literal(ast::LiteralValue::Int32 { 0: value as i32 }))
+                (ast::Value::Literal(ast::LiteralValue::Int32 { 0: value as i32 }), ast::TypeDefinition::INT(TypeQualifier::from(true)))
             },
             Some(ast::Token::StringLiteral(v)) => {
                 let value = v.clone();
                 self.input.pop();
-                Ok(ast::Value::Literal(ast::LiteralValue::StringLiteral(value)))
+                (ast::Value::Literal(ast::LiteralValue::StringLiteral(value)), ast::TypeDefinition::CHAR(TypeQualifier::from(true)).as_pointer_to(TypeQualifier::from(false)))
             }
             Some(ast::Token::Identifier(id)) => {
                 let value = id.clone();
+                let ident_type = self.scope.find(&value);
                 self.input.pop();
-                Ok(ast::Value::Identifier(value))
+                if let Some(type_decl) = ident_type {
+                    (ast::Value::Identifier(value), type_decl.clone())
+                } else {
+                    unimplemented!("variable references undeclared identifier {}", value);
+                }
             }
-            _ => Err(format!("Unable to parse primary expression. expected token found {:?}", self.input.peek())),
-        }
+            _ => unimplemented!("Unable to parse primary expression. expected token found {:?}", self.input.peek())
+        };
+
+        let expr = ast::Expression::new_value(value, expr_type);
+        Ok(expr)
     }
 
     pub fn parse_argument_expression_list(&mut self) -> ParseResult<Vec<ast::Expression>> {
@@ -206,18 +216,25 @@ impl ParserState {
         let base_type = self.parse_declaration_specifiers()?;
         let (name, decl_type) = self.parse_declarator(base_type)?;
 
-        if let ast::TypeDefinition::FUNCTION(return_type, arguments) = decl_type {
-            if self.input.peek() == Some(&ast::Token::Paren('{')) {
+        if let ast::TypeDefinition::FUNCTION(return_type, parameters, is_local) = decl_type {
+            let is_definition = self.input.peek() == Some(&ast::Token::Paren('{'));
+            self.scope.define(&name, &return_type.clone().as_function_taking(parameters.clone(), is_definition)); 
+            if is_definition {
+                self.scope.begin_function_scope()?;
+                for (arg_name, arg_type) in parameters.iter() {
+                    self.scope.define(arg_name, arg_type);
+                }
                 let compound_statement = self.parse_compound_statement()?;
+                self.scope.end_function_scope()?;
                 Ok((
                     name,
-                    ast::FunctionDefinition::new(*return_type, arguments.into(), compound_statement),
+                    ast::FunctionDefinition::new(*return_type, parameters.into(), compound_statement),
                 ))
             } else {
                 self.input.expect(&ast::Token::Semicolon)?;
                 Ok((
                     name,
-                    ast::FunctionDefinition::new_declaration(*return_type, arguments.into()),
+                    ast::FunctionDefinition::new_declaration(*return_type, parameters.into()),
                 ))
             }
         } else {
@@ -295,7 +312,7 @@ impl ParserState {
 
                 self.input.expect(&ast::Token::Paren(')'))?;
 
-                base_type.as_function_taking(parameter_list)
+                base_type.as_function_taking(parameter_list, false)
             }
             Some(&ast::Token::Paren('[')) => {
                 self.input.pop();

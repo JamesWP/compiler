@@ -49,7 +49,7 @@ pub struct TypeQualifier {
 pub enum TypeDefinition {
     INT(TypeQualifier),
     CHAR(TypeQualifier),
-    FUNCTION(Box<TypeDefinition>, ParameterList),
+    FUNCTION(Box<TypeDefinition>, ParameterList, bool),// bool is definition / is local
     POINTER(TypeQualifier, Box<TypeDefinition>),
 }
 
@@ -77,12 +77,21 @@ pub enum JumpStatement {
     Return,
     ReturnWithValue(Expression),
 }
+#[derive(Debug, Clone, PartialEq)]
+pub enum BinOp {
+    Sum
+}
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Expression {
-    Additive(Box<Expression>, Box<Expression>),
-    Unary(Value),
-    Call(String, Vec<Expression>),
+pub enum ExpressionNode {
+    Binary(BinOp, Box<Expression>, Box<Expression>),
+    Value(Value),
+    Call(Box<Expression>, Vec<Expression>),
+}
+#[derive(Debug, Clone, PartialEq)]
+pub struct Expression {
+    pub expr_type: TypeDefinition,
+    pub node: ExpressionNode,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -102,6 +111,16 @@ impl From<Vec<(String, TypeDefinition)>> for ParameterList {
         ParameterList { parameters, var_args: false }
     }
 }
+
+impl From<Vec<Expression>> for ParameterList {
+    fn from(parameters: Vec<Expression>) -> ParameterList {
+        ParameterList { 
+            parameters:parameters.iter().map(|expr| (String::default(), expr.expr_type.clone())).collect(), 
+            var_args: false 
+        }
+    }
+}
+
 
 impl Into<Vec<(String, TypeDefinition)>> for ParameterList {
     fn into(self) -> Vec<(String, TypeDefinition)> {
@@ -280,16 +299,63 @@ impl TypeDefinition {
         match self {
             TypeDefinition::INT(_) => 4,
             TypeDefinition::CHAR(_) => 1,
-            TypeDefinition::FUNCTION(_, _) => 8,
+            TypeDefinition::FUNCTION(_, _, _) => 8,
             TypeDefinition::POINTER(_, _) => 8,
         }
     }
 
-    pub fn as_function_taking(self, args: ParameterList) -> Self {
-        TypeDefinition::FUNCTION(Box::new(self), args)
+    pub fn as_function_taking(self, args: ParameterList, is_definition: bool) -> Self {
+        TypeDefinition::FUNCTION(Box::new(self), args, is_definition)
     }
 
     pub fn as_pointer_to(self, specifiers: TypeQualifier) -> Self {
         TypeDefinition::POINTER(specifiers, Box::new(self))
+    }
+}
+
+impl Expression {
+    pub fn new_binop(op: BinOp, lhs: Box<Expression>, rhs: Box<Expression>) -> Expression {
+        let int_result = TypeDefinition::INT(TypeQualifier::from(true));
+        let char_result = TypeDefinition::INT(TypeQualifier::from(true));
+        use crate::ast::TypeDefinition::*;
+        let result_type= match (&lhs.expr_type, &rhs.expr_type) {
+            (INT(_), INT(_)) => int_result,
+            (INT(_), CHAR(_)) => int_result,
+            (INT(_), FUNCTION(_, _, _)) => todo!(),
+            (INT(_), POINTER(_, _)) => todo!(),
+            (CHAR(_), INT(_)) => int_result,
+            (CHAR(_), CHAR(_)) => char_result,
+            (CHAR(_), FUNCTION(_, _, _)) => todo!(),
+            (CHAR(_), POINTER(_, _)) => todo!(),
+            (FUNCTION(_, _, _), INT(_)) => todo!(),
+            (FUNCTION(_, _, _), CHAR(_)) => todo!(),
+            (FUNCTION(_, _, _), FUNCTION(_, _, _)) => todo!(),
+            (FUNCTION(_, _, _), POINTER(_, _)) => todo!(),
+            (POINTER(_, _), INT(_)) => todo!(),
+            (POINTER(_, _), CHAR(_)) => todo!(),
+            (POINTER(_, _), FUNCTION(_, _, _)) => todo!(),
+            (POINTER(_, _), POINTER(_, _)) => todo!(),
+        };
+        Expression {
+            expr_type: result_type,
+            node: ExpressionNode::Binary(op, lhs, rhs)
+        }
+    }
+    pub fn new_call(lhs: Box<Expression>, arguments: Vec<Expression>) -> Expression {
+        // TODO: get return type from lhs expression
+        if let TypeDefinition::FUNCTION(return_type, _, _) = lhs.as_ref().clone().expr_type {
+            Expression {
+                expr_type: *return_type,
+                node: ExpressionNode::Call(lhs, arguments)
+            }
+        } else {
+            unimplemented!("attempt to call non function {:?}", lhs.as_ref());
+        }
+    }
+    pub fn new_value(value: Value, expr_type: TypeDefinition) -> Expression {
+        Expression {
+            expr_type,
+            node: ExpressionNode::Value(value)
+        }
     }
 }

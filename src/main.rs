@@ -7,8 +7,9 @@ mod parser;
 mod platform;
 mod stringiter;
 mod examples;
-
 mod intern;
+mod scope;
+
 
 fn main() -> std::io::Result<()> {
     let mut filename = "examples/01_simple.c".to_owned();
