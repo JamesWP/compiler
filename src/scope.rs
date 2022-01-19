@@ -10,10 +10,6 @@ pub struct Scope {
 
 pub type ScopeResult<T> = std::result::Result<T, String>;
 
-fn error<T>(text: & str) -> ScopeResult<T> {
-    ScopeResult::Err(text.to_owned())
-}
-
 fn define(map: &mut HashMap<String, TypeDefinition>, name: &str, definition: &TypeDefinition) {
     let name = name.to_owned();
     let old_value = map.insert(name.clone(), definition.clone());
@@ -133,23 +129,23 @@ fn test_scope() {
     assert_eq!(scope.find("global"), Some(&char));
 
     {
-        scope.begin_function_scope();
+        scope.begin_function_scope().unwrap();
         scope.define("a", &char);
         assert_eq!(scope.find("a"), Some(&char));
         assert_eq!(scope.find("global"), Some(&char));
 
         {
-            scope.begin_scope();
+            scope.begin_scope().unwrap();
             scope.define("a", &int_p);
             assert_eq!(scope.find("a"), Some(&int_p));
             assert_eq!(scope.find("global"), Some(&char));
-            scope.end_scope();
+            scope.end_scope().unwrap();
         }
 
         assert_eq!(scope.find("a"), Some(&char));
         assert_eq!(scope.find("global"), Some(&char));
 
-        scope.end_function_scope();
+        scope.end_function_scope().unwrap();
     }
 
     assert_eq!(scope.find("a"), Some(&int));

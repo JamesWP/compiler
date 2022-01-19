@@ -195,15 +195,6 @@ impl ParameterPlacement {
     }
 }
 
-pub fn return_reg(decl_type: &ast::TypeDefinition) -> X86_64Reg {
-    match decl_type {
-        ast::TypeDefinition::INT(_) => X86_64Reg::EAX,
-        ast::TypeDefinition::CHAR(_) => todo!(),
-        ast::TypeDefinition::FUNCTION(_, _, _) => todo!(),
-        ast::TypeDefinition::POINTER(_, _) => X86_64Reg::RAX,
-    }
-}
-
 impl ParameterInfo {
     pub fn new(
         name: &str,

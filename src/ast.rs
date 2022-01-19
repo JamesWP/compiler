@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum ResWord {
     Return,
@@ -17,6 +15,7 @@ pub enum Token {
     Semicolon,
     Divide,
     Plus,
+    Minus,
     Comma,
     Equals,
     Elipsis,
@@ -79,7 +78,10 @@ pub enum JumpStatement {
 }
 #[derive(Debug, Clone, PartialEq)]
 pub enum BinOp {
-    Sum
+    Sum,
+    Difference,
+    Product,
+    Quotient
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -129,10 +131,6 @@ impl Into<Vec<(String, TypeDefinition)>> for ParameterList {
 }
 
 impl ParameterList {
-    pub fn len(&self) -> u32{
-        self.parameters.len() as u32
-    }
-
     pub fn with_var_args(mut self) -> Self {
         self.var_args = true;
         self
@@ -251,7 +249,7 @@ impl FunctionDefinition {
             Statement::Declaration(DeclarationStatement {
                 name,
                 decl_type,
-                expression,
+                ..
             }) => {
                 names.push((name.clone(), decl_type.clone()));
             }
@@ -285,12 +283,6 @@ impl DeclarationStatement {
             name,
             expression: Some(expression),
         }
-    }
-}
-
-impl ParameterList {
-    pub fn is_empty(&self) -> bool {
-        self.parameters.is_empty()
     }
 }
 

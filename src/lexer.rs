@@ -10,6 +10,7 @@ pub trait CharPeekIt: Iterator<Item = char> {
 }
 
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub struct Pos {
     line: u32,
     col: u32,
@@ -33,6 +34,7 @@ pub struct Lexer {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct Location {
     filename: String,
     start: Pos,
@@ -177,6 +179,7 @@ impl Iterator for Lexer {
             }
             '/' => Token::Divide,
             '+' => Token::Plus,
+            '-' => Token::Minus,
             '=' => Token::Equals,
             '*' => Token::Star,
             '.' => {

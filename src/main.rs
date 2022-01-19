@@ -43,7 +43,7 @@ fn main() -> std::io::Result<()> {
     let lexer = lexer::Lexer::new(Box::new(file), &filename);
 
     if print_lex {
-        for (loc, toc) in lexer {
+        for (_loc, toc) in lexer {
             print!("[{:?}] ", toc);
         }
         println!("");

@@ -1,5 +1,3 @@
-use std::ops::Deref;
-
 use crate::{ast::{self, Token, TypeQualifier}, scope::Scope};
 
 pub struct ParserInput {
@@ -117,18 +115,50 @@ impl ParserState {
     }
 
     fn parse_additive_expression(&mut self) -> ParseResult<ast::Expression> {
+        let mut multiplicative_expression = self.parse_multiplicative_expression()?;
+
+        loop {
+            match self.input.peek() {
+                Some(&ast::Token::Plus) => {
+                    self.input.pop();
+
+                    let next_unary = self.parse_multiplicative_expression()?;
+
+                    multiplicative_expression = ast::Expression::new_binop(ast::BinOp::Sum, multiplicative_expression.into(), next_unary.into());
+                },
+                Some(&ast::Token::Minus) => {
+                    self.input.pop();
+
+                    let next_unary = self.parse_multiplicative_expression()?;
+
+                    multiplicative_expression = ast::Expression::new_binop(ast::BinOp::Difference, multiplicative_expression.into(), next_unary.into());
+                },
+                _ => { return Ok(multiplicative_expression); }
+            }
+        }
+    }
+
+    fn parse_multiplicative_expression(&mut self)  -> ParseResult<ast::Expression> {
         let mut unary_expression = self.parse_unary_expression()?;
 
         loop {
-            if Some(&ast::Token::Plus) != self.input.peek() {
-                return Ok(unary_expression);
+            match self.input.peek() {
+                Some(&ast::Token::Star) => {
+                    self.input.pop();
+
+                    let next_unary = self.parse_unary_expression()?;
+
+                    unary_expression = ast::Expression::new_binop(ast::BinOp::Product, unary_expression.into(), next_unary.into());
+                },
+                Some(&ast::Token::Divide) => {
+                    self.input.pop();
+
+                    let next_unary = self.parse_unary_expression()?;
+
+                    unary_expression = ast::Expression::new_binop(ast::BinOp::Quotient, unary_expression.into(), next_unary.into());
+                },
+                _ => { return Ok(unary_expression); }
             }
-
-            self.input.pop();
-
-            let next_unary = self.parse_unary_expression()?;
-
-            unary_expression = ast::Expression::new_binop(ast::BinOp::Sum, unary_expression.into(), next_unary.into());
         }
     }
 
@@ -176,6 +206,12 @@ impl ParserState {
                     unimplemented!("variable references undeclared identifier {}", value);
                 }
             }
+            Some(ast::Token::Paren('(')) => {
+                self.input.pop();
+                let expr = self.parse_expression()?;
+                self.input.expect(&ast::Token::Paren(')'))?;
+                return Ok(expr);
+            }
             _ => unimplemented!("Unable to parse primary expression. expected token found {:?}", self.input.peek())
         };
 
@@ -216,7 +252,7 @@ impl ParserState {
         let base_type = self.parse_declaration_specifiers()?;
         let (name, decl_type) = self.parse_declarator(base_type)?;
 
-        if let ast::TypeDefinition::FUNCTION(return_type, parameters, is_local) = decl_type {
+        if let ast::TypeDefinition::FUNCTION(return_type, parameters, _is_local) = decl_type {
             let is_definition = self.input.peek() == Some(&ast::Token::Paren('{'));
             self.scope.define(&name, &return_type.clone().as_function_taking(parameters.clone(), is_definition)); 
             if is_definition {
@@ -378,7 +414,7 @@ impl ParserState {
 
 #[test]
 fn test_parse_translation_unit() {
-    let mut input = vec![
+    let input = vec![
         ast::Token::Reserved(ast::ResWord::Int),
         ast::Token::Identifier("foo".to_owned()),
         ast::Token::Paren('('),
@@ -395,60 +431,4 @@ fn test_parse_translation_unit() {
     let parse_result = ParserState::new(input.into()).parse_translation_unit();
 
     println!("{:#?}", parse_result);
-}
-#[test]
-fn test_parse_statement() {
-    let mut input = vec![
-        ast::Token::Reserved(ast::ResWord::Return),
-        ast::Token::Value(3),
-        ast::Token::Semicolon,
-    ];
-
-    let parse_result = ParserState::new(input.into()).parse_statement_list();
-
-    assert_eq!(
-        format!("{:?}", parse_result),
-        "Ok(CompoundStatement { statements: [JumpStatement(ReturnWithValue(Unary(Literal(Int32(3)))))] })"
-    );
-
-    let mut input = vec![
-        ast::Token::Reserved(ast::ResWord::Return),
-        ast::Token::Semicolon,
-    ];
-
-    let parse_result = ParserState::new(input.into()).parse_statement_list();
-
-    assert_eq!(
-        format!("{:?}", parse_result),
-        "Ok(CompoundStatement { statements: [JumpStatement(Return)] })"
-    );
-}
-
-#[test]
-fn test_parse_expression() {
-    let mut input = vec![ast::Token::Value(1), ast::Token::Plus, ast::Token::Value(3)];
-
-    let parse_result = ParserState::new(input.into()).parse_expression();
-
-    println!("Parse Result: {:?}", parse_result);
-    assert_eq!(
-        format!("{:?}", parse_result),
-        "Ok(Additive(Unary(Literal(Int32(1))), Unary(Literal(Int32(3)))))"
-    );
-
-    let mut input = vec![
-        ast::Token::Value(1),
-        ast::Token::Plus,
-        ast::Token::Value(3),
-        ast::Token::Plus,
-        ast::Token::Value(10),
-    ];
-
-    let parse_result = ParserState::new(input.into()).parse_expression();
-
-    println!("Parse Result: {:?}", parse_result);
-    assert_eq!(
-        format!("{:?}", parse_result),
-        "Ok(Additive(Additive(Unary(Literal(Int32(1))), Unary(Literal(Int32(3)))), Unary(Literal(Int32(10)))))"
-    );
 }

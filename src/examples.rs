@@ -1,7 +1,3 @@
-use std::fs;
-
-use itertools::Itertools;
-
 fn go(name: &str, command: &mut std::process::Command) -> bool {
     let args: Vec<_> = command.get_args().map(|os|format!("{:?}", os.to_string_lossy().to_string())).collect();
     let program = command.get_program().to_string_lossy().to_string();
@@ -50,6 +46,12 @@ fn run(executable_file: &str) -> bool {
     go("RUN", std::process::Command::new(executable_file).env_clear())
 }
 
+#[cfg(test)]
+use itertools::Itertools;
+
+#[cfg(test)]
+use std::fs;
+
 #[test]
 pub fn test() {
     assert!(go("BUILD", std::process::Command::new("cargo").arg("build")));
@@ -64,7 +66,7 @@ pub fn test() {
     entries.sort(); 
 
     let ex = | e: &String | {
-        let (num, name) = e.split_once('_').unwrap();
+        let (num, _name) = e.split_once('_').unwrap();
         let ex_num: u64 = num.parse().unwrap();
         ex_num
     };
@@ -72,7 +74,7 @@ pub fn test() {
     let examples = entries.into_iter().group_by(|a,| ex(a));
 
     let output_dir = "target";
-    std::fs::create_dir(output_dir);
+    let _unused = std::fs::create_dir(output_dir);
 
     let mut has_failed = false;
 

@@ -4,8 +4,6 @@ use crate::platform::X86_64Reg as reg;
 use crate::platform::DecimalLiteral as DL;
 use crate::platform::Operand;
 use crate::intern;
-use std::collections::HashMap;
-use std::collections::hash_map::Entry;
 use std::fmt::Display;
 use std::fmt::Write;
 
@@ -85,7 +83,7 @@ pub fn compile(translation_unit: &ast::TranslationUnit) -> std::io::Result<Strin
     state.compile_translation_unit(translation_unit)?;
 
     state.output_comment("Data time!")?;
-    state.output_section("data");
+    state.output_section("data")?;
     for (label, data) in state.intern.get_labels() {
         state.output_label(&label)?;
         state.output_asciiz(&data)?;
@@ -235,7 +233,6 @@ impl CompilationState {
     ) -> std::io::Result<()> {
         let scratch_register_64 = reg::RDI;
         let scratch_register_32 = reg::EDI;
-        dbg!(expression);
         match &expression.node {
             ast::ExpressionNode::Binary(op, lhs, rhs) => {
                 self.compile_expression(lhs.as_ref(), destination)?;
@@ -255,6 +252,23 @@ impl CompilationState {
                     match op {
                         ast::BinOp::Sum => {
                             assemble!(self, "addl", scratch_register_32, destination);
+                        },
+                        ast::BinOp::Difference => {
+                            assemble!(self, "subl", scratch_register_32, destination);
+                        },
+                        ast::BinOp::Product => {
+                            if !destination.is_memory() && (destination.reg() == Some(&reg::EAX) || destination.reg() == Some(&reg::RAX)) {
+                                assemble!(self, "mull", scratch_register_32);
+                            } else {
+                                assemble!(self, "pushq", reg::RAX);
+                                assemble!(self, "mov", destination, reg::RAX);
+                                assemble!(self, "mull", scratch_register_32);
+                                assemble!(self, "mov", reg::RAX, destination);
+                                assemble!(self, "popq", reg::RAX);
+                            }
+                        },
+                        ast::BinOp::Quotient => {
+                            assemble!(self, "divl", scratch_register_32, destination);
                         },
                     }
                 }
