@@ -250,7 +250,6 @@ impl Default for StackLayout {
 impl StackLayout {
     pub fn allocate(&mut self, name: &str, type_def: &ast::TypeDefinition, size_in_bytes: usize) -> StackRelativeLocation {
         // Make space in the stack
-        self.stack_size += size_in_bytes;
         self.next_free_location += size_in_bytes;
 
         let location_in_stack = 0 - self.next_free_location as i32;
@@ -260,6 +259,7 @@ impl StackLayout {
         }
 
         self.next_free_location = (self.next_free_location + size_in_bytes - 1) / size_in_bytes * size_in_bytes;
+        self.stack_size = self.next_free_location;
 
         let allocation = StackRelativeLocation::new(location_in_stack, size_in_bytes);
         let param_info = ParameterInfo::new(name, type_def, allocation.clone());

@@ -235,7 +235,7 @@ impl CompilationState {
         let scratch_register_32 = reg::EDI;
         match &expression.node {
             ast::ExpressionNode::Binary(op, lhs, rhs) => {
-                self.compile_expression(lhs.as_ref(), destination)?;
+                self.compile_expression(rhs.as_ref(), destination)?;
 
                 if let Some(destination) = destination {
                     // store result of expression on stack temporarily
@@ -243,7 +243,7 @@ impl CompilationState {
                     assemble!(self, "pushq", scratch_register_64);
                 }
 
-                self.compile_expression(&rhs, destination)?;
+                self.compile_expression(&lhs, destination)?;
 
                 if let Some(destination) = destination {
                     // retreive the value of the lhs
