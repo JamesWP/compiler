@@ -221,6 +221,13 @@ impl StackRelativeLocation {
             size,
         }
     }
+    pub fn top_32() -> StackRelativeLocation {
+        StackRelativeLocation {
+            reg: X86_64Reg::RSP,
+            offset: 0,
+            size: 0,
+        }
+    }
 }
 
 impl Display for StackRelativeLocation {
@@ -276,4 +283,11 @@ impl StackLayout {
             None => Err(std::io::Error::new(std::io::ErrorKind::NotFound, format!("variable {} not defined", name)))
         }
     }
+}
+
+
+#[test]
+pub fn test_stack_allocate() {
+    let mut_layout = StackLayout::default();
+
 }

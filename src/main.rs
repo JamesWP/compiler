@@ -17,6 +17,7 @@ fn main() -> std::io::Result<()> {
 
     let mut set_output = false;
     let mut print_lex = false;
+    let mut print_ast = false;
 
     let mut args = std::env::args().skip(1);
 
@@ -27,6 +28,10 @@ fn main() -> std::io::Result<()> {
         }
         if arg == "-l" {
             print_lex = true;
+            continue;
+        }
+        if arg =="-d" {
+            print_ast = true;
             continue;
         }
         if set_output {
@@ -61,12 +66,14 @@ fn main() -> std::io::Result<()> {
             translation_unit.err().unwrap(),
         ));
     }
-
-    println!("Ast Dump");
-
+ 
     let translation_unit = translation_unit.unwrap();
 
-    println!("{:#?}", translation_unit);
+    if print_ast {
+        println!("Ast Dump");
+
+        println!("{:#?}", translation_unit);
+    }
 
     let assembly = compiler::compile(&translation_unit)?;
 

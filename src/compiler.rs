@@ -1,8 +1,8 @@
 use crate::ast;
 use crate::platform;
+use crate::platform::StackRelativeLocation;
 use crate::platform::X86_64Reg as reg;
 use crate::platform::DecimalLiteral as DL;
-use crate::platform::Operand;
 use crate::intern;
 use std::fmt::Display;
 use std::fmt::Write;
@@ -110,7 +110,6 @@ impl CompilationState {
 
             let parameter_list = &definition.parameter_list;
 
-            println!("{}, statement {:?}", name, definition.compound_statement);
             if definition.compound_statement.is_none() {
                 // skip declaration
                 continue;
@@ -191,123 +190,104 @@ impl CompilationState {
     }
 
     fn compile_statement(&mut self, statement: &ast::Statement) -> std::io::Result<()> {
+        let result_64 = reg::RAX;
+        let result_32 = reg::EAX;
+
+        let post_amble = |state:&mut CompilationState| {
+            let stack_size = state.function_stack_frame.as_ref().unwrap().stack_size;
+            if stack_size != 0 {
+                assemble!(state, "movq", reg::RBP, reg::RSP);
+            }
+            // TODO: read information about all registers which need popping
+            assemble!(state, "popq", reg::RBP);
+        };
+
         match statement {
             ast::Statement::JumpStatement(ast::JumpStatement::Return) => {
-                let stack_size = self.function_stack_frame.as_ref().unwrap().stack_size;
-                if stack_size != 0 {
-                    assemble!(self, "movq", reg::RBP, reg::RSP);
-                }
-                // TODO: read information about all registers which need popping
-                assemble!(self, "popq", reg::RBP);
+                post_amble(self);
                 assemble!(self, "ret");
             }
             ast::Statement::JumpStatement(ast::JumpStatement::ReturnWithValue(s)) => {
                 // TODO: read information about all registers which need popping
-                self.compile_expression(s, Some(&reg::EAX))?;
-                let stack_size = self.function_stack_frame.as_ref().unwrap().stack_size;
-                if stack_size != 0 {
-                    assemble!(self, "movq", reg::RBP, reg::RSP);
-                }
-                assemble!(self, "popq", reg::RBP);
+                self.compile_expression(s)?;
+                post_amble(self);
                 assemble!(self, "ret");
             }
             ast::Statement::Declaration(declaration) => {
                 let name = &declaration.name;
                 let location = self.function_stack_frame.as_ref().unwrap().get_location(name)?;
                 if let Some(e) = &declaration.expression {
-                    self.compile_expression(&e, Some(&location))?;
+                    self.compile_expression(&e)?;
+                    match location.size {
+                        8 => assemble!(self, "mov", result_64, location),
+                        4 => assemble!(self, "movl", result_32, location),
+                        s => unimplemented!("size error, {}", s)
+                    }
                 }
             }
             ast::Statement::Expression(e) => {
-                self.compile_expression::<reg>(e, None)?;
+                self.compile_expression(e)?;
             },
         }
 
         Ok(())
     }
 
-    fn compile_expression<Dest: Operand>(
+    fn compile_expression(
         &mut self,
-        expression: &ast::Expression,
-        destination: Option<&Dest>,
+        expression: &ast::Expression
     ) -> std::io::Result<()> {
-        let scratch_register_64 = reg::RDI;
-        let scratch_register_32 = reg::EDI;
+        let result_64 = reg::RAX;
+        let result_32 = reg::EAX;
         match &expression.node {
             ast::ExpressionNode::Binary(op, lhs, rhs) => {
-                self.compile_expression(rhs.as_ref(), destination)?;
+                self.compile_expression(rhs.as_ref())?;
 
-                if let Some(destination) = destination {
-                    // store result of expression on stack temporarily
-                    assemble!(self, "movl" , destination, scratch_register_32);
-                    assemble!(self, "pushq", scratch_register_64);
+                assemble!(self, "pushq", result_64);
+
+                self.compile_expression(&lhs)?;
+
+                match op {
+                    ast::BinOp::Sum => {
+                        assemble!(self, "addl", StackRelativeLocation::top_32(), result_32);
+                    },
+                    ast::BinOp::Difference => {
+                        assemble!(self, "subl", StackRelativeLocation::top_32(), result_32);
+                    },
+                    ast::BinOp::Product => {
+                        assemble!(self, "mull", StackRelativeLocation::top_32());
+                    },
+                    ast::BinOp::Quotient => {
+                        assemble!(self, "divl", StackRelativeLocation::top_32());
+                    },
                 }
 
-                self.compile_expression(&lhs, destination)?;
-
-                if let Some(destination) = destination {
-                    // retreive the value of the lhs
-                    assemble!(self, "popq", scratch_register_64);
-
-                    match op {
-                        ast::BinOp::Sum => {
-                            assemble!(self, "addl", scratch_register_32, destination);
-                        },
-                        ast::BinOp::Difference => {
-                            assemble!(self, "subl", scratch_register_32, destination);
-                        },
-                        ast::BinOp::Product => {
-                            if !destination.is_memory() && (destination.reg() == Some(&reg::EAX) || destination.reg() == Some(&reg::RAX)) {
-                                assemble!(self, "mull", scratch_register_32);
-                            } else {
-                                assemble!(self, "pushq", reg::RAX);
-                                assemble!(self, "mov", destination, reg::RAX);
-                                assemble!(self, "mull", scratch_register_32);
-                                assemble!(self, "mov", reg::RAX, destination);
-                                assemble!(self, "popq", reg::RAX);
-                            }
-                        },
-                        ast::BinOp::Quotient => {
-                            assemble!(self, "divl", scratch_register_32, destination);
-                        },
-                    }
-                }
+                // Balance the stack
+                assemble!(self, "add", DL::new(8), reg::RSP);
             }
             ast::ExpressionNode::Value(v) => {
                 match v {
                     ast::Value::Literal(l) => {
                         match l {
                             ast::LiteralValue::Int32(value) => {
-                                if let Some(destination) = destination {
-                                    assemble!(self, "movl", DL::new(value), destination);
-                                }
+                                assemble!(self, "movl", DL::new(value), result_32);
                             },
                             ast::LiteralValue::StringLiteral(value) => {
-                                if let Some(destination) = destination {
-                                    let label = self.intern.add(&value);
-                                    assemble!(self, "lea", format!("{}(%rip)", label), destination);
-                                }
+                                let label = self.intern.add(&value);
+                                assemble!(self, "lea", format!("{}(%rip)", label), result_64);
                             },
                         }
                     },
                     ast::Value::Identifier(name) => {
-                        if let Some(destination) = destination {
-                            if let ast::TypeDefinition::FUNCTION(_,_,is_local) = expression.expr_type {
-                                if is_local {
-                                    assemble!(self, "lea", format!("{}(%rip)", name), destination);
-                                } else {
-                                    assemble!(self, "mov", format!("{}@GOTPCREL(%rip)", name), destination);
-                                }
+                        if let ast::TypeDefinition::FUNCTION(_,_,is_local) = expression.expr_type {
+                            if is_local {
+                                assemble!(self, "lea", format!("{}(%rip)", name), result_64);
                             } else {
-                                let location = self.function_stack_frame.as_ref().unwrap().get_location(&name)?;
-                                if location.is_memory() && destination.is_memory() {
-                                    // use scratch register to hold rhs value. as add can only have a single memory operand.
-                                    assemble!(self, "movl", location, scratch_register_32);
-                                    assemble!(self, "movl", scratch_register_32, destination);
-                                } else {
-                                    assemble!(self, "movl", location, destination);
-                                }
+                                assemble!(self, "mov", format!("{}@GOTPCREL(%rip)", name), result_64);
                             }
+                        } else {
+                            let location = self.function_stack_frame.as_ref().unwrap().get_location(&name)?;
+                            assemble!(self, "movl", location, result_32);
                         }
                     },
                 }
@@ -324,28 +304,24 @@ impl CompilationState {
                
                 for arg in args {
                     let param = param_place.place(&arg.expr_type);
-                    if let Some(ref reg) = param.reg {
-                        self.compile_expression(&arg, Some(reg))?;
+                    if let Some(ref _reg) = param.reg {
+                        self.compile_expression(&arg)?;
                     } else {
                         unimplemented!();
                     }
                 }
           
                 // assemble call instruction
-                self.compile_expression(lhs.as_ref(), Some(&reg::RBX))?;
+                self.compile_expression(lhs.as_ref())?;
 
                 //TODO: if is var arg, and fpu is used, calculate number of fpu regs used
                 if call_is_vararg {
-                  assemble!(self, "xor", reg::EAX, reg::EAX);
-                }      
-
-                assemble!(self, "call", format!("*{}",reg::RBX));
-
-                if let Some(destination) = destination {
-                    if destination.is_memory() || destination.reg() != Some(&reg::EAX) {
-                        assemble!(self, "movl", reg::EAX, destination);
-                    }
-                }
+                    assemble!(self, "mov", reg::RAX, reg::RBX);
+                    assemble!(self, "xor", reg::EAX, reg::EAX);
+                    assemble!(self, "call", format!("*{}",reg::RBX));
+                } else {
+                    assemble!(self, "call", format!("*{}",reg::RAX));
+                }    
             }
         }
         Ok(())

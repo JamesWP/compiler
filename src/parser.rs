@@ -17,9 +17,7 @@ impl ParserInput {
         self.tokens.last()
     }
     fn pop(&mut self) -> Option<ast::Token> {
-        let t = self.tokens.pop();
-        println!("Token {:?}", t);
-        t
+        self.tokens.pop()
     }
     fn expect(&mut self, token: &ast::Token) -> Result<(), String> {
         if self.peek() == Some(token) {
