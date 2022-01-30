@@ -294,7 +294,7 @@ impl CompilationState {
             }
             ast::ExpressionNode::Call(lhs,args) => {
                 // TODO: check function types
-                let call_is_vararg = if let ast::TypeDefinition::FUNCTION(_, params, _) = &expression.expr_type {
+                let call_is_vararg = if let ast::TypeDefinition::FUNCTION(_, params, _) = &lhs.expr_type {
                   params.var_args
                 } else { 
                   false
@@ -303,9 +303,15 @@ impl CompilationState {
                 let mut param_place = platform::ParameterPlacement::default();
                
                 for arg in args {
-                    let param = param_place.place(&arg.expr_type);
-                    if let Some(ref _reg) = param.reg {
+                    let expr_type = &arg.expr_type;
+                    let param = param_place.place(&expr_type);
+                    if let Some(ref reg) = param.reg {
                         self.compile_expression(&arg)?;
+                        match expr_type.size() {
+                            4 => assemble!(self, "movl", reg::EAX, reg),
+                            8 => assemble!(self, "movq", reg::RAX, reg),
+                            _ => todo!("Can't move parameter of this size")
+                        }
                     } else {
                         unimplemented!();
                     }
