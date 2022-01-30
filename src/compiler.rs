@@ -109,12 +109,12 @@ impl CompilationState {
 
             let parameter_list = &definition.parameter_list;
 
-            if definition.compound_statement.is_none() {
+            if definition.function_body.is_none() {
                 // skip declaration
                 continue;
             }
 
-            let statement = definition.compound_statement.as_ref().unwrap();
+            let statement = definition.function_body.as_ref().unwrap();
 
             self.output_newline()?;
             self.output_type(name, "function")?;
@@ -217,7 +217,8 @@ impl CompilationState {
                 post_amble(self);
                 assemble!(self, "ret");
             }
-            ast::Statement::Declaration(declaration) => {
+            ast::Statement::WhileStatement(_) => todo!(),
+            ast::Statement::DeclarationStatement(declaration) => {
                 let name = &declaration.name;
                 let location = self
                     .function_stack_frame
@@ -235,6 +236,9 @@ impl CompilationState {
             }
             ast::Statement::Expression(e) => {
                 self.compile_expression(e)?;
+            }
+            ast::Statement::CompoundStatement(statements) => {
+                unimplemented!();
             }
         }
 

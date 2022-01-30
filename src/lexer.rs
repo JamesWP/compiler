@@ -182,6 +182,9 @@ impl Iterator for Lexer {
             '-' => Token::Minus,
             '=' => Token::Equals,
             '*' => Token::Star,
+            '<' => Token::LessThan,
+            '>' => Token::GreaterThan,
+            '!' => Token::Not,
             '.' => {
                 let token = self.read_token(char, |c| c == '.');
                 if token == "..." {
@@ -200,6 +203,20 @@ impl Iterator for Lexer {
                     Token::Reserved(ResWord::Const)
                 } else if token == "return" {
                     Token::Reserved(ResWord::Return)
+                } else if token == "if" {
+                    Token::Reserved(ResWord::If)
+                } else if token == "else" {
+                    Token::Reserved(ResWord::Else)
+                } else if token == "while" {
+                    Token::Reserved(ResWord::While)
+                } else if token == "do" {
+                    Token::Reserved(ResWord::Do)
+                } else if token == "for" {
+                    Token::Reserved(ResWord::For)
+                } else if token == "continue" {
+                    Token::Reserved(ResWord::Continue)
+                } else if token == "break" {
+                    Token::Reserved(ResWord::Break)
                 } else {
                     Token::Identifier(token)
                 }

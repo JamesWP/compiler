@@ -1,9 +1,18 @@
+use std::ops::DerefMut;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum ResWord {
     Return,
     Int,
     Char,
     Const,
+    If,
+    Else,
+    While,
+    For,
+    Do,
+    Break,
+    Continue,
 }
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
@@ -20,6 +29,9 @@ pub enum Token {
     Equals,
     Elipsis,
     Star,
+    LessThan,
+    GreaterThan,
+    Not,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -30,7 +42,7 @@ pub struct TranslationUnit {
 pub struct FunctionDefinition {
     pub return_type: TypeDefinition,
     pub parameter_list: ParameterList,
-    pub compound_statement: Option<CompoundStatement>,
+    pub function_body: Option<Statement>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -53,14 +65,11 @@ pub enum TypeDefinition {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct CompoundStatement {
-    statements: Vec<Statement>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
     JumpStatement(JumpStatement),
-    Declaration(DeclarationStatement),
+    WhileStatement(WhileStatement),
+    DeclarationStatement(DeclarationStatement),
+    CompoundStatement(Vec<Statement>),
     Expression(Expression),
 }
 
@@ -76,6 +85,13 @@ pub enum JumpStatement {
     Return,
     ReturnWithValue(Expression),
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WhileStatement {
+    pub condition_expression: Expression,
+    pub loop_body: Box<Statement>
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum BinOp {
     Sum,
@@ -142,9 +158,9 @@ impl ParameterList {
     }
 }
 
-impl From<Vec<Statement>> for CompoundStatement {
-    fn from(statements: Vec<Statement>) -> CompoundStatement {
-        CompoundStatement { statements }
+impl From<Vec<Statement>> for Statement {
+    fn from(statements: Vec<Statement>) -> Statement {
+        Statement::CompoundStatement(statements)
     }
 }
 
@@ -154,33 +170,48 @@ impl Default for TypeDefinition {
     }
 }
 
-impl IntoIterator for CompoundStatement {
+impl IntoIterator for Statement {
     type Item = Statement;
     type IntoIter = std::vec::IntoIter<Self::Item>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.statements.into_iter()
+        match self {
+            Statement::CompoundStatement(statements) => statements.into_iter(),
+            _ => unimplemented!()
+        }
     }
 }
 
-impl CompoundStatement {
+impl Statement {
     pub fn iter(&self) -> std::slice::Iter<Statement> {
-        self.statements.iter()
+        match self {
+            Statement::CompoundStatement(statements) => statements.iter(),
+            _ => unimplemented!()
+        }
     }
 
     pub fn visit_statements<F>(&self, f: &mut F)
     where
         F: FnMut(&Statement) -> (),
     {
-        for statement in &self.statements {
-            f(statement);
+        f(self);
 
-            // TODO: when statements can be nested, this needs to visit all of them!
-            match statement {
-                Statement::JumpStatement(_) => {}
-                Statement::Declaration(_) => {}
-                Statement::Expression(_) => {}
-            }
+
+        // TODO: when statements can be nested, this needs to visit all of them!
+        match self {
+            // These statements can't contain any other statements
+            Statement::JumpStatement(_) => {}
+            Statement::DeclarationStatement(_) => {}
+            Statement::Expression(_) => {}
+            // These statements can contain other statements, visit them
+            Statement::WhileStatement(w) => {
+                w.loop_body.visit_statements(f);
+            },
+            Statement::CompoundStatement(statements) => {
+                for statement in statements {
+                    statement.visit_statements(f);
+                }
+            },
         }
     }
 }
@@ -222,12 +253,12 @@ impl FunctionDefinition {
     pub fn new(
         return_type: TypeDefinition,
         parameters: ParameterList,
-        body: CompoundStatement,
+        body: Statement,
     ) -> FunctionDefinition {
         FunctionDefinition {
             return_type,
             parameter_list: parameters,
-            compound_statement: Some(body),
+            function_body: Some(body),
         }
     }
 
@@ -238,7 +269,7 @@ impl FunctionDefinition {
         FunctionDefinition {
             return_type,
             parameter_list: parameters,
-            compound_statement: None,
+            function_body: None,
         }
     }
 
@@ -247,7 +278,7 @@ impl FunctionDefinition {
         let mut names = vec![];
 
         let mut add_definition = |statement: &Statement| match statement {
-            Statement::Declaration(DeclarationStatement {
+            Statement::DeclarationStatement(DeclarationStatement {
                 name, decl_type, ..
             }) => {
                 names.push((name.clone(), decl_type.clone()));
@@ -255,7 +286,7 @@ impl FunctionDefinition {
             _ => {}
         };
 
-        if let Some(statement) = &self.compound_statement {
+        if let Some(statement) = &self.function_body {
             statement.visit_statements(&mut add_definition);
         }
 

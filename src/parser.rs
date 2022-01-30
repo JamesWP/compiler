@@ -44,11 +44,13 @@ impl From<Vec<ast::Token>> for ParserInput {
 }
 
 fn is_type_decl(token: Option<&ast::Token>) -> bool {
+    use ast::ResWord::*;
     match token {
         Some(x) => match x {
             Token::Reserved(r) => match r {
-                ast::ResWord::Return => false,
-                ast::ResWord::Int | ast::ResWord::Char | ast::ResWord::Const => true,
+                Return => false,
+                Int | Char | Const => true,
+                If | Else | Do | For | While | Continue | Break => false,
             },
             _ => false,
         },
@@ -61,20 +63,6 @@ impl ParserState {
         ParserState {
             input,
             scope: Scope::default(),
-        }
-    }
-
-    #[allow(dead_code)]
-    fn parse_statement_list(&mut self) -> ParseResult<ast::CompoundStatement> {
-        let mut statements = Vec::new();
-        statements.push(self.parse_statement()?);
-
-        loop {
-            if Some(&ast::Token::Reserved(ast::ResWord::Return)) != self.input.peek() {
-                return Ok(statements.into());
-            }
-
-            statements.push(self.parse_statement()?);
         }
     }
 
@@ -91,20 +79,31 @@ impl ParserState {
                     ast::JumpStatement::ReturnWithValue(return_expr),
                 ))
             }
+        } else if self.input.peek() == Some(&ast::Token::Reserved(ast::ResWord::While)) {
+            self.input.pop();
+            self.input.expect(&ast::Token::Paren('('))?;
+            let condition_expression = self.parse_expression()?;
+            self.input.expect(&ast::Token::Paren(')'))?;
+            let loop_body = Box::new(self.parse_statement()?);
+
+            Ok(ast::Statement::WhileStatement(
+                ast::WhileStatement { condition_expression, loop_body }))    
+        } else if self.input.peek() == Some(&ast::Token::Reserved(ast::ResWord::If)) {
+            unimplemented!("If");
         } else if is_type_decl(self.input.peek()) {
             let base_type = self.parse_declaration_specifiers()?;
             let (name, decl_type) = self.parse_declarator(base_type)?;
             self.scope.define(&name, &decl_type);
             if self.input.peek() == Some(&ast::Token::Semicolon) {
                 self.input.pop();
-                Ok(ast::Statement::Declaration(ast::DeclarationStatement::new(
+                Ok(ast::Statement::DeclarationStatement(ast::DeclarationStatement::new(
                     decl_type, name,
                 )))
             } else {
                 self.input.expect(&ast::Token::Equals)?;
                 let expression = self.parse_expression()?;
                 self.input.expect(&ast::Token::Semicolon)?;
-                Ok(ast::Statement::Declaration(
+                Ok(ast::Statement::DeclarationStatement(
                     ast::DeclarationStatement::new_with_expression(decl_type, name, expression),
                 ))
             }
@@ -447,7 +446,7 @@ impl ParserState {
         Ok(param_list.into())
     }
 
-    fn parse_compound_statement(&mut self) -> ParseResult<ast::CompoundStatement> {
+    fn parse_compound_statement(&mut self) -> ParseResult<ast::Statement> {
         self.input.expect(&ast::Token::Paren('{'))?;
 
         let mut statements = Vec::new();
