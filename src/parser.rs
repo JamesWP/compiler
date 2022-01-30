@@ -1,6 +1,6 @@
 use crate::{
     ast::{self, Token, TypeQualifier},
-    scope::Scope,
+    scope::Scope, platform::Parameter,
 };
 
 pub struct ParserInput {
@@ -115,7 +115,19 @@ impl ParserState {
     }
 
     fn parse_expression(&mut self) -> ParseResult<ast::Expression> {
-        self.parse_additive_expression()
+        self.parse_equality_expression()
+    }
+
+    fn parse_equality_expression(&mut self) -> ParseResult<ast::Expression> {
+        let relational_expression = self.parse_relational_expression()?;
+
+        todo!("parse != and == if present");
+    }
+
+    fn parse_relational_expression(&mut self) -> ParseResult<ast::Expression> {
+        let additive_expression = self.parse_additive_expression()?;
+
+        todo!("parse <, >, <=, and >=  if present");
     }
 
     fn parse_additive_expression(&mut self) -> ParseResult<ast::Expression> {
