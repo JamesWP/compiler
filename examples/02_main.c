@@ -1,4 +1,4 @@
-#include <stdio.h>
+int printf(const char *format, ...);
 
 int foo(int a, int b);
 int foomore(int a, int b, int c);
@@ -13,11 +13,20 @@ int main(int argc, char* argv[]) {
     int i = 0;
     int j = 3;
     int k = 4;
-    for(; i+j+k < 500; i+=1, j+=2, k += 100) {
+    while(i+j+k < 500){
+        i = i + 1;
+        j = j + 2;
+        k = k + 100;
+
+        int total = i + j + k;
         printf("Calling foomore with %d, %d, %d\n", i, j, k);
         int return_value = foomore(i,j,k);
+
         printf("return value is %d\n", return_value);
+        if (return_value != total) {
+            return 1;
+        }
     }
 
-    return return_value == 579? 0: 1;
+    return 0;
 }
