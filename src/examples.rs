@@ -1,5 +1,8 @@
 fn go(name: &str, command: &mut std::process::Command) -> bool {
-    let args: Vec<_> = command.get_args().map(|os|format!("{:?}", os.to_string_lossy().to_string())).collect();
+    let args: Vec<_> = command
+        .get_args()
+        .map(|os| format!("{:?}", os.to_string_lossy().to_string()))
+        .collect();
     let program = command.get_program().to_string_lossy().to_string();
 
     let result = if let Ok(output) = command.output() {
@@ -7,16 +10,25 @@ fn go(name: &str, command: &mut std::process::Command) -> bool {
             Ok(())
         } else {
             Err((
-                    std::str::from_utf8(&output.stdout).map(|s|s.to_owned()).unwrap_or(format!("bad utf8 output")),
-                    std::str::from_utf8(&output.stderr).map(|s|s.to_owned()).unwrap_or(format!("bad utf8 output"))
-                ))
+                std::str::from_utf8(&output.stdout)
+                    .map(|s| s.to_owned())
+                    .unwrap_or(format!("bad utf8 output")),
+                std::str::from_utf8(&output.stderr)
+                    .map(|s| s.to_owned())
+                    .unwrap_or(format!("bad utf8 output")),
+            ))
         }
     } else {
         Err(("".to_owned(), format!("Unable to start program")))
     };
 
-
-    println!("[{:<10}] {}: {} {}", name, if result.is_ok() { "SUCCESS"} else {"FAILED"}, program, args.join(" "));
+    println!(
+        "[{:<10}] {}: {} {}",
+        name,
+        if result.is_ok() { "SUCCESS" } else { "FAILED" },
+        program,
+        args.join(" ")
+    );
 
     if let Err((ref stdout, ref stderr)) = result {
         for line in stdout.lines() {
@@ -31,19 +43,41 @@ fn go(name: &str, command: &mut std::process::Command) -> bool {
 }
 
 fn native_compile(source_file: &str, object_file: &str) -> bool {
-    go("NATIVE CC", std::process::Command::new("gcc").arg("-c").arg(source_file).arg("-o").arg(object_file))
+    go(
+        "NATIVE CC",
+        std::process::Command::new("gcc")
+            .arg("-c")
+            .arg(source_file)
+            .arg("-o")
+            .arg(object_file),
+    )
 }
 
 fn compile(source_file: &str, object_file: &str) -> bool {
-    go("COMPILER", std::process::Command::new("target/debug/compiler").arg(source_file).arg("-o").arg(object_file))
+    go(
+        "COMPILER",
+        std::process::Command::new("target/debug/compiler")
+            .arg(source_file)
+            .arg("-o")
+            .arg(object_file),
+    )
 }
 
 fn link(executable_file: &str, object_files: &[String]) -> bool {
-    go("LINK", std::process::Command::new("gcc").args(object_files).arg("-o").arg(executable_file))
+    go(
+        "LINK",
+        std::process::Command::new("gcc")
+            .args(object_files)
+            .arg("-o")
+            .arg(executable_file),
+    )
 }
 
 fn run(executable_file: &str) -> bool {
-    go("RUN", std::process::Command::new(executable_file).env_clear())
+    go(
+        "RUN",
+        std::process::Command::new(executable_file).env_clear(),
+    )
 }
 
 #[cfg(test)]
@@ -54,24 +88,27 @@ use std::fs;
 
 #[test]
 pub fn test() {
-    assert!(go("BUILD", std::process::Command::new("cargo").arg("build")));
+    assert!(go(
+        "BUILD",
+        std::process::Command::new("cargo").arg("build")
+    ));
 
     let mut entries: Vec<_> = fs::read_dir("examples")
         .unwrap()
-        .map(|res| res.map(|e|e.path()))
+        .map(|res| res.map(|e| e.path()))
         .filter_map(std::result::Result::ok)
-        .map(|e|e.file_name().unwrap().to_owned().into_string().unwrap())
+        .map(|e| e.file_name().unwrap().to_owned().into_string().unwrap())
         .collect();
 
-    entries.sort(); 
+    entries.sort();
 
-    let ex = | e: &String | {
+    let ex = |e: &String| {
         let (num, _name) = e.split_once('_').unwrap();
         let ex_num: u64 = num.parse().unwrap();
         ex_num
     };
 
-    let examples = entries.into_iter().group_by(|a,| ex(a));
+    let examples = entries.into_iter().group_by(|a| ex(a));
 
     let output_dir = "target";
     let _unused = std::fs::create_dir(output_dir);
@@ -115,7 +152,7 @@ pub fn test() {
             has_failed = true;
             continue;
         }
-        
+
         println!("----------- Building TEST");
 
         let output = format!("{}/example_{:02}_test", output_dir, key);

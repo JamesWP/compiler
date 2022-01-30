@@ -3,7 +3,7 @@ use std::collections::HashMap;
 pub type Label = String;
 
 pub struct LabelAllocator {
-    next_label: u32
+    next_label: u32,
 }
 
 pub struct Intern {
@@ -31,7 +31,7 @@ impl Intern {
     pub fn new() -> Intern {
         Intern {
             map: HashMap::new(),
-            label_alloc: LabelAllocator::default()
+            label_alloc: LabelAllocator::default(),
         }
     }
 
@@ -44,8 +44,9 @@ impl Intern {
     }
 
     pub fn get_labels(&self) -> Vec<(Label, String)> {
-        self.map.iter().map(|(data, label)| {
-            (label.clone(), data.clone())
-        }).collect()
+        self.map
+            .iter()
+            .map(|(data, label)| (label.clone(), data.clone()))
+            .collect()
     }
 }

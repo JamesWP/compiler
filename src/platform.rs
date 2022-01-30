@@ -1,6 +1,6 @@
 use crate::ast;
-use std::fmt::Display;
 use std::collections::HashMap;
+use std::fmt::Display;
 
 #[derive(Clone, PartialEq)]
 #[allow(dead_code)]
@@ -63,7 +63,7 @@ pub struct ParameterInfo {
 }
 
 pub struct DecimalLiteral {
-    value: i32
+    value: i32,
 }
 
 #[allow(dead_code)]
@@ -157,7 +157,7 @@ impl Display for DecimalLiteral {
 impl DecimalLiteral {
     pub fn new<T: std::borrow::Borrow<i32>>(value: T) -> DecimalLiteral {
         DecimalLiteral {
-            value: *value.borrow()
+            value: *value.borrow(),
         }
     }
 }
@@ -179,18 +179,16 @@ impl Default for ParameterPlacement {
 impl ParameterPlacement {
     pub fn place(&mut self, param_type: &ast::TypeDefinition) -> Parameter {
         match param_type {
-            ast::TypeDefinition::INT(_)|
-            ast::TypeDefinition::CHAR(_) => {
+            ast::TypeDefinition::INT(_) | ast::TypeDefinition::CHAR(_) => {
                 let reg = INTEGER_32_REGISTER_ORDER[self.num_integer_args].clone();
                 self.num_integer_args += 1;
                 Parameter::new(reg)
-            },
-            ast::TypeDefinition::FUNCTION(_, _, _)|
-            ast::TypeDefinition::POINTER(_, _) => {
+            }
+            ast::TypeDefinition::FUNCTION(_, _, _) | ast::TypeDefinition::POINTER(_, _) => {
                 let reg = INTEGER_64_REGISTER_ORDER[self.num_integer_args].clone();
                 self.num_integer_args += 1;
                 Parameter::new(reg)
-            },
+            }
         }
     }
 }
@@ -255,7 +253,12 @@ impl Default for StackLayout {
 }
 
 impl StackLayout {
-    pub fn allocate(&mut self, name: &str, type_def: &ast::TypeDefinition, size_in_bytes: usize) -> StackRelativeLocation {
+    pub fn allocate(
+        &mut self,
+        name: &str,
+        type_def: &ast::TypeDefinition,
+        size_in_bytes: usize,
+    ) -> StackRelativeLocation {
         // Make space in the stack
         self.next_free_location += size_in_bytes;
 
@@ -265,14 +268,16 @@ impl StackLayout {
             unimplemented!("cant allocate non multiple of 2 sized space in stack");
         }
 
-        self.next_free_location = (self.next_free_location + size_in_bytes - 1) / size_in_bytes * size_in_bytes;
+        self.next_free_location =
+            (self.next_free_location + size_in_bytes - 1) / size_in_bytes * size_in_bytes;
         self.stack_size = self.next_free_location;
 
         let allocation = StackRelativeLocation::new(location_in_stack, size_in_bytes);
         let param_info = ParameterInfo::new(name, type_def, allocation.clone());
         self.allocated.push(param_info);
 
-        self.lookup_map.insert(name.to_owned(), self.allocated.len()-1);
+        self.lookup_map
+            .insert(name.to_owned(), self.allocated.len() - 1);
 
         allocation
     }
@@ -280,14 +285,15 @@ impl StackLayout {
     pub fn get_location(&self, name: &String) -> std::io::Result<StackRelativeLocation> {
         match self.lookup_map.get(name) {
             Some(allocation) => Ok(self.allocated[*allocation].stack_allocation.clone()),
-            None => Err(std::io::Error::new(std::io::ErrorKind::NotFound, format!("variable {} not defined", name)))
+            None => Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("variable {} not defined", name),
+            )),
         }
     }
 }
 
-
 #[test]
 pub fn test_stack_allocate() {
     let mut_layout = StackLayout::default();
-
 }

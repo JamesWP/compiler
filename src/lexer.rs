@@ -183,7 +183,7 @@ impl Iterator for Lexer {
             '=' => Token::Equals,
             '*' => Token::Star,
             '.' => {
-                let token = self.read_token(char, |c|c=='.');
+                let token = self.read_token(char, |c| c == '.');
                 if token == "..." {
                     Token::Elipsis
                 } else {

@@ -1,4 +1,3 @@
-
 use std::collections::HashMap;
 
 use crate::ast::{TypeDefinition, TypeQualifier};
@@ -16,8 +15,13 @@ fn define(map: &mut HashMap<String, TypeDefinition>, name: &str, definition: &Ty
 
     if let Some(TypeDefinition::FUNCTION(return_type, arguments, is_local)) = &old_value {
         if let TypeDefinition::FUNCTION(return_type_new, arguments_new, is_local_new) = definition {
-            if return_type != return_type_new || arguments != arguments_new  {
-                unimplemented!("redefinition of {} from {:?} to {:?}", name, definition, old_value);
+            if return_type != return_type_new || arguments != arguments_new {
+                unimplemented!(
+                    "redefinition of {} from {:?} to {:?}",
+                    name,
+                    definition,
+                    old_value
+                );
             }
 
             // Allow redeclaration
@@ -25,7 +29,7 @@ fn define(map: &mut HashMap<String, TypeDefinition>, name: &str, definition: &Ty
             match map.get_mut(&name).unwrap() {
                 TypeDefinition::FUNCTION(_, _, is_local_mut) => {
                     *is_local_mut = is_local;
-                },
+                }
                 _ => {}
             }
 
@@ -35,7 +39,12 @@ fn define(map: &mut HashMap<String, TypeDefinition>, name: &str, definition: &Ty
 
     if let Some(old_definition) = &old_value {
         if definition != old_definition {
-            unimplemented!("redefinition of {} from {:?} to {:?}", name, definition, old_value);
+            unimplemented!(
+                "redefinition of {} from {:?} to {:?}",
+                name,
+                definition,
+                old_value
+            );
         }
     }
 }
@@ -95,25 +104,25 @@ impl Scope {
 
     pub fn define(&mut self, name: &str, definition: &TypeDefinition) {
         if let Some(last) = self.block.last_mut() {
-           define(last, name, definition);
+            define(last, name, definition);
         } else {
-           define(&mut self.file, name, definition);
+            define(&mut self.file, name, definition);
         }
     }
 
     pub fn find(&self, name: &str) -> Option<&TypeDefinition> {
-        let name = name.to_owned();        
+        let name = name.to_owned();
         for scope in self.block.iter().rev() {
             if let Some(definition) = scope.get(&name) {
                 return Some(definition);
             }
         }
-        
+
         return self.file.get(&name);
     }
 }
 
-#[test] 
+#[test]
 fn test_scope() {
     let mut scope = Scope::default();
 

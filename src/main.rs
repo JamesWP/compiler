@@ -1,15 +1,13 @@
-
 mod ast;
 mod compiler;
+mod examples;
 mod fileiter;
+mod intern;
 mod lexer;
 mod parser;
 mod platform;
-mod stringiter;
-mod examples;
-mod intern;
 mod scope;
-
+mod stringiter;
 
 fn main() -> std::io::Result<()> {
     let mut filename = "examples/01_simple.c".to_owned();
@@ -30,7 +28,7 @@ fn main() -> std::io::Result<()> {
             print_lex = true;
             continue;
         }
-        if arg =="-d" {
+        if arg == "-d" {
             print_ast = true;
             continue;
         }
@@ -66,7 +64,7 @@ fn main() -> std::io::Result<()> {
             translation_unit.err().unwrap(),
         ));
     }
- 
+
     let translation_unit = translation_unit.unwrap();
 
     if print_ast {
@@ -81,8 +79,8 @@ fn main() -> std::io::Result<()> {
 
     use std::io::Write;
     for (line_no, line) in assembly.lines().enumerate() {
-        println!("{:<03}    {}", line_no+1, line);
-    }   
+        println!("{:<03}    {}", line_no + 1, line);
+    }
 
     println!("Written to {}", output_filename);
 

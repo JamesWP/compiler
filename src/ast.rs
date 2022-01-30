@@ -3,7 +3,7 @@ pub enum ResWord {
     Return,
     Int,
     Char,
-    Const
+    Const,
 }
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
@@ -36,7 +36,7 @@ pub struct FunctionDefinition {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParameterList {
     parameters: Vec<(String, TypeDefinition)>,
-    pub var_args: bool
+    pub var_args: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -48,7 +48,7 @@ pub struct TypeQualifier {
 pub enum TypeDefinition {
     INT(TypeQualifier),
     CHAR(TypeQualifier),
-    FUNCTION(Box<TypeDefinition>, ParameterList, bool),// bool is definition / is local
+    FUNCTION(Box<TypeDefinition>, ParameterList, bool), // bool is definition / is local
     POINTER(TypeQualifier, Box<TypeDefinition>),
 }
 
@@ -81,7 +81,7 @@ pub enum BinOp {
     Sum,
     Difference,
     Product,
-    Quotient
+    Quotient,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -105,24 +105,29 @@ pub enum Value {
 #[derive(Debug, Clone, PartialEq)]
 pub enum LiteralValue {
     Int32(i32),
-    StringLiteral(String)
+    StringLiteral(String),
 }
 
 impl From<Vec<(String, TypeDefinition)>> for ParameterList {
     fn from(parameters: Vec<(String, TypeDefinition)>) -> ParameterList {
-        ParameterList { parameters, var_args: false }
+        ParameterList {
+            parameters,
+            var_args: false,
+        }
     }
 }
 
 impl From<Vec<Expression>> for ParameterList {
     fn from(parameters: Vec<Expression>) -> ParameterList {
-        ParameterList { 
-            parameters:parameters.iter().map(|expr| (String::default(), expr.expr_type.clone())).collect(), 
-            var_args: false 
+        ParameterList {
+            parameters: parameters
+                .iter()
+                .map(|expr| (String::default(), expr.expr_type.clone()))
+                .collect(),
+            var_args: false,
         }
     }
 }
-
 
 impl Into<Vec<(String, TypeDefinition)>> for ParameterList {
     fn into(self) -> Vec<(String, TypeDefinition)> {
@@ -196,17 +201,13 @@ impl Default for TranslationUnit {
 
 impl Default for TypeQualifier {
     fn default() -> Self {
-        TypeQualifier {
-            is_const: false
-        }
+        TypeQualifier { is_const: false }
     }
 }
 
 impl From<bool> for TypeQualifier {
     fn from(is_const: bool) -> Self {
-        TypeQualifier {
-            is_const
-        }
+        TypeQualifier { is_const }
     }
 }
 
@@ -247,9 +248,7 @@ impl FunctionDefinition {
 
         let mut add_definition = |statement: &Statement| match statement {
             Statement::Declaration(DeclarationStatement {
-                name,
-                decl_type,
-                ..
+                name, decl_type, ..
             }) => {
                 names.push((name.clone(), decl_type.clone()));
             }
@@ -310,7 +309,7 @@ impl Expression {
         let int_result = TypeDefinition::INT(TypeQualifier::from(true));
         let char_result = TypeDefinition::INT(TypeQualifier::from(true));
         use crate::ast::TypeDefinition::*;
-        let result_type= match (&lhs.expr_type, &rhs.expr_type) {
+        let result_type = match (&lhs.expr_type, &rhs.expr_type) {
             (INT(_), INT(_)) => int_result,
             (INT(_), CHAR(_)) => int_result,
             (INT(_), FUNCTION(_, _, _)) => todo!(),
@@ -330,7 +329,7 @@ impl Expression {
         };
         Expression {
             expr_type: result_type,
-            node: ExpressionNode::Binary(op, lhs, rhs)
+            node: ExpressionNode::Binary(op, lhs, rhs),
         }
     }
     pub fn new_call(lhs: Box<Expression>, arguments: Vec<Expression>) -> Expression {
@@ -338,7 +337,7 @@ impl Expression {
         if let TypeDefinition::FUNCTION(return_type, _, _) = lhs.as_ref().clone().expr_type {
             Expression {
                 expr_type: *return_type,
-                node: ExpressionNode::Call(lhs, arguments)
+                node: ExpressionNode::Call(lhs, arguments),
             }
         } else {
             unimplemented!("attempt to call non function {:?}", lhs.as_ref());
@@ -347,7 +346,7 @@ impl Expression {
     pub fn new_value(value: Value, expr_type: TypeDefinition) -> Expression {
         Expression {
             expr_type,
-            node: ExpressionNode::Value(value)
+            node: ExpressionNode::Value(value),
         }
     }
 }

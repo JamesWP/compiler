@@ -1,4 +1,7 @@
-use crate::{ast::{self, Token, TypeQualifier}, scope::Scope};
+use crate::{
+    ast::{self, Token, TypeQualifier},
+    scope::Scope,
+};
 
 pub struct ParserInput {
     tokens: Vec<ast::Token>,
@@ -47,7 +50,7 @@ fn is_type_decl(token: Option<&ast::Token>) -> bool {
                 ast::ResWord::Return => false,
                 ast::ResWord::Int | ast::ResWord::Char | ast::ResWord::Const => true,
             },
-            _ => false
+            _ => false,
         },
         None => false,
     }
@@ -57,8 +60,8 @@ impl ParserState {
     pub fn new(input: ParserInput) -> ParserState {
         ParserState {
             input,
-            scope: Scope::default()
-        } 
+            scope: Scope::default(),
+        }
     }
 
     #[allow(dead_code)]
@@ -94,12 +97,16 @@ impl ParserState {
             self.scope.define(&name, &decl_type);
             if self.input.peek() == Some(&ast::Token::Semicolon) {
                 self.input.pop();
-                Ok(ast::Statement::Declaration(ast::DeclarationStatement::new(decl_type, name)))
+                Ok(ast::Statement::Declaration(ast::DeclarationStatement::new(
+                    decl_type, name,
+                )))
             } else {
                 self.input.expect(&ast::Token::Equals)?;
                 let expression = self.parse_expression()?;
                 self.input.expect(&ast::Token::Semicolon)?;
-                Ok(ast::Statement::Declaration(ast::DeclarationStatement::new_with_expression(decl_type, name, expression)))
+                Ok(ast::Statement::Declaration(
+                    ast::DeclarationStatement::new_with_expression(decl_type, name, expression),
+                ))
             }
         } else {
             let expr = self.parse_expression()?;
@@ -122,21 +129,31 @@ impl ParserState {
 
                     let next_unary = self.parse_multiplicative_expression()?;
 
-                    multiplicative_expression = ast::Expression::new_binop(ast::BinOp::Sum, multiplicative_expression.into(), next_unary.into());
-                },
+                    multiplicative_expression = ast::Expression::new_binop(
+                        ast::BinOp::Sum,
+                        multiplicative_expression.into(),
+                        next_unary.into(),
+                    );
+                }
                 Some(&ast::Token::Minus) => {
                     self.input.pop();
 
                     let next_unary = self.parse_multiplicative_expression()?;
 
-                    multiplicative_expression = ast::Expression::new_binop(ast::BinOp::Difference, multiplicative_expression.into(), next_unary.into());
-                },
-                _ => { return Ok(multiplicative_expression); }
+                    multiplicative_expression = ast::Expression::new_binop(
+                        ast::BinOp::Difference,
+                        multiplicative_expression.into(),
+                        next_unary.into(),
+                    );
+                }
+                _ => {
+                    return Ok(multiplicative_expression);
+                }
             }
         }
     }
 
-    fn parse_multiplicative_expression(&mut self)  -> ParseResult<ast::Expression> {
+    fn parse_multiplicative_expression(&mut self) -> ParseResult<ast::Expression> {
         let mut unary_expression = self.parse_unary_expression()?;
 
         loop {
@@ -146,16 +163,26 @@ impl ParserState {
 
                     let next_unary = self.parse_unary_expression()?;
 
-                    unary_expression = ast::Expression::new_binop(ast::BinOp::Product, unary_expression.into(), next_unary.into());
-                },
+                    unary_expression = ast::Expression::new_binop(
+                        ast::BinOp::Product,
+                        unary_expression.into(),
+                        next_unary.into(),
+                    );
+                }
                 Some(&ast::Token::Divide) => {
                     self.input.pop();
 
                     let next_unary = self.parse_unary_expression()?;
 
-                    unary_expression = ast::Expression::new_binop(ast::BinOp::Quotient, unary_expression.into(), next_unary.into());
-                },
-                _ => { return Ok(unary_expression); }
+                    unary_expression = ast::Expression::new_binop(
+                        ast::BinOp::Quotient,
+                        unary_expression.into(),
+                        next_unary.into(),
+                    );
+                }
+                _ => {
+                    return Ok(unary_expression);
+                }
             }
         }
     }
@@ -179,7 +206,10 @@ impl ParserState {
         let argument_expressions = self.parse_argument_expression_list()?;
         self.input.expect(&ast::Token::Paren(')'))?;
 
-        Ok(ast::Expression::new_call(function_expr.into(), argument_expressions))
+        Ok(ast::Expression::new_call(
+            function_expr.into(),
+            argument_expressions,
+        ))
     }
 
     fn parse_primary_expression(&mut self) -> ParseResult<ast::Expression> {
@@ -187,12 +217,19 @@ impl ParserState {
             Some(ast::Token::Value(v)) => {
                 let value = *v;
                 self.input.pop();
-                (ast::Value::Literal(ast::LiteralValue::Int32 { 0: value as i32 }), ast::TypeDefinition::INT(TypeQualifier::from(true)))
-            },
+                (
+                    ast::Value::Literal(ast::LiteralValue::Int32 { 0: value as i32 }),
+                    ast::TypeDefinition::INT(TypeQualifier::from(true)),
+                )
+            }
             Some(ast::Token::StringLiteral(v)) => {
                 let value = v.clone();
                 self.input.pop();
-                (ast::Value::Literal(ast::LiteralValue::StringLiteral(value)), ast::TypeDefinition::CHAR(TypeQualifier::from(true)).as_pointer_to(TypeQualifier::from(false)))
+                (
+                    ast::Value::Literal(ast::LiteralValue::StringLiteral(value)),
+                    ast::TypeDefinition::CHAR(TypeQualifier::from(true))
+                        .as_pointer_to(TypeQualifier::from(false)),
+                )
             }
             Some(ast::Token::Identifier(id)) => {
                 let value = id.clone();
@@ -210,7 +247,10 @@ impl ParserState {
                 self.input.expect(&ast::Token::Paren(')'))?;
                 return Ok(expr);
             }
-            _ => unimplemented!("Unable to parse primary expression. expected token found {:?}", self.input.peek())
+            _ => unimplemented!(
+                "Unable to parse primary expression. expected token found {:?}",
+                self.input.peek()
+            ),
         };
 
         let expr = ast::Expression::new_value(value, expr_type);
@@ -222,14 +262,14 @@ impl ParserState {
         loop {
             if self.input.peek() == Some(&ast::Token::Paren(')')) {
                 return Ok(args);
-            } 
+            }
 
             let expr = self.parse_expression()?;
             args.push(expr);
 
             if self.input.peek() == Some(&ast::Token::Comma) {
                 self.input.pop();
-                continue;    
+                continue;
             }
         }
     }
@@ -244,15 +284,18 @@ impl ParserState {
         Ok(translation_unit)
     }
 
-    fn parse_function_definition(
-        &mut self,
-    ) -> ParseResult<(String, ast::FunctionDefinition)> {
+    fn parse_function_definition(&mut self) -> ParseResult<(String, ast::FunctionDefinition)> {
         let base_type = self.parse_declaration_specifiers()?;
         let (name, decl_type) = self.parse_declarator(base_type)?;
 
         if let ast::TypeDefinition::FUNCTION(return_type, parameters, _is_local) = decl_type {
             let is_definition = self.input.peek() == Some(&ast::Token::Paren('{'));
-            self.scope.define(&name, &return_type.clone().as_function_taking(parameters.clone(), is_definition)); 
+            self.scope.define(
+                &name,
+                &return_type
+                    .clone()
+                    .as_function_taking(parameters.clone(), is_definition),
+            );
             if is_definition {
                 self.scope.begin_function_scope()?;
                 for (arg_name, arg_type) in parameters.iter() {
@@ -262,7 +305,11 @@ impl ParserState {
                 self.scope.end_function_scope()?;
                 Ok((
                     name,
-                    ast::FunctionDefinition::new(*return_type, parameters.into(), compound_statement),
+                    ast::FunctionDefinition::new(
+                        *return_type,
+                        parameters.into(),
+                        compound_statement,
+                    ),
                 ))
             } else {
                 self.input.expect(&ast::Token::Semicolon)?;
@@ -289,8 +336,8 @@ impl ParserState {
                     self.input.pop();
                     is_const = true;
                 }
-                Some(ast::Token::Reserved(ast::ResWord::Char)) |
-                Some(ast::Token::Reserved(ast::ResWord::Int)) => {
+                Some(ast::Token::Reserved(ast::ResWord::Char))
+                | Some(ast::Token::Reserved(ast::ResWord::Int)) => {
                     if let Some(x) = type_word {
                         unimplemented!("Can't specify type twice, already specified as {:?}", x);
                     }
@@ -301,7 +348,9 @@ impl ParserState {
                         unimplemented!("bad code");
                     }
                 }
-                _ => { break; }
+                _ => {
+                    break;
+                }
             }
         }
 
@@ -323,7 +372,10 @@ impl ParserState {
         Ok(ast::TypeQualifier::from(is_const))
     }
 
-    fn parse_declarator(&mut self, mut base_type: ast::TypeDefinition) -> ParseResult<(String, ast::TypeDefinition)> {
+    fn parse_declarator(
+        &mut self,
+        mut base_type: ast::TypeDefinition,
+    ) -> ParseResult<(String, ast::TypeDefinition)> {
         // parse pointers
         while self.input.peek() == Some(&ast::Token::Star) {
             self.input.pop();
@@ -353,7 +405,7 @@ impl ParserState {
                 self.input.expect(&ast::Token::Paren(']'))?;
                 base_type.as_pointer_to(false.into())
             }
-            _ => base_type
+            _ => base_type,
         };
 
         Ok((name, result))
