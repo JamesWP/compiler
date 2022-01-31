@@ -218,6 +218,7 @@ impl CompilationState {
                 assemble!(self, "ret");
             }
             ast::Statement::WhileStatement(_) => todo!(),
+            ast::Statement::IfStatement(_) => todo!(),
             ast::Statement::DeclarationStatement(declaration) => {
                 let name = &declaration.name;
                 let location = self
@@ -269,6 +270,7 @@ impl CompilationState {
                     ast::BinOp::Quotient => {
                         assemble!(self, "divl", StackRelativeLocation::top_32());
                     }
+                    _ => todo!("implement binop {:?}", op),
                 }
 
                 // Balance the stack

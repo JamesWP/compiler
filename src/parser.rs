@@ -1,6 +1,6 @@
 use crate::{
     ast::{self, Token, TypeQualifier},
-    scope::Scope, platform::Parameter,
+    scope::Scope,
 };
 
 pub struct ParserInput {
@@ -16,6 +16,18 @@ pub struct ParserState {
 type ParseResult<T> = std::result::Result<T, String>;
 
 impl ParserInput {
+    fn double_peek(&self) -> (Option<&ast::Token>, Option<&ast::Token>) {
+        if let Some((last, rest)) = self.tokens.split_last() {
+            let second_last = if let Some((second_last, _rest)) = rest.split_last() {
+                Some(second_last)
+            } else {
+                None
+            };
+            (Some(last), second_last)
+        } else {
+            (None, None)
+        }
+    }
     fn peek(&self) -> Option<&ast::Token> {
         self.tokens.last()
     }
@@ -58,6 +70,10 @@ fn is_type_decl(token: Option<&ast::Token>) -> bool {
     }
 }
 
+fn is_unary_expression(token: Option<&ast::Token>) -> bool {
+    todo!();
+}
+
 impl ParserState {
     pub fn new(input: ParserInput) -> ParserState {
         ParserState {
@@ -86,19 +102,38 @@ impl ParserState {
             self.input.expect(&ast::Token::Paren(')'))?;
             let loop_body = Box::new(self.parse_statement()?);
 
-            Ok(ast::Statement::WhileStatement(
-                ast::WhileStatement { condition_expression, loop_body }))    
+            Ok(ast::Statement::WhileStatement(ast::WhileStatement {
+                condition_expression,
+                loop_body,
+            }))
         } else if self.input.peek() == Some(&ast::Token::Reserved(ast::ResWord::If)) {
-            unimplemented!("If");
+            self.input.pop();
+            self.input.expect(&ast::Token::Paren('('))?;
+            let condition_expression = self.parse_expression()?;
+            self.input.expect(&ast::Token::Paren(')'))?;
+            let if_body = Box::new(self.parse_statement()?);
+            let else_body = if self.input.peek() == Some(&ast::Token::Reserved(ast::ResWord::Else))
+            {
+                self.input.pop();
+                Some(Box::new(self.parse_statement()?))
+            } else {
+                None
+            };
+
+            Ok(ast::Statement::IfStatement(ast::IfStatement {
+                condition_expression,
+                if_body,
+                else_body,
+            }))
         } else if is_type_decl(self.input.peek()) {
             let base_type = self.parse_declaration_specifiers()?;
             let (name, decl_type) = self.parse_declarator(base_type)?;
             self.scope.define(&name, &decl_type);
             if self.input.peek() == Some(&ast::Token::Semicolon) {
                 self.input.pop();
-                Ok(ast::Statement::DeclarationStatement(ast::DeclarationStatement::new(
-                    decl_type, name,
-                )))
+                Ok(ast::Statement::DeclarationStatement(
+                    ast::DeclarationStatement::new(decl_type, name),
+                ))
             } else {
                 self.input.expect(&ast::Token::Equals)?;
                 let expression = self.parse_expression()?;
@@ -107,6 +142,11 @@ impl ParserState {
                     ast::DeclarationStatement::new_with_expression(decl_type, name, expression),
                 ))
             }
+        } else if self.input.peek() == Some(&ast::Token::Paren('{')) {
+            self.scope.begin_scope()?;
+            let statement = self.parse_compound_statement()?;
+            self.scope.end_scope()?;
+            Ok(statement)
         } else {
             let expr = self.parse_expression()?;
             self.input.expect(&ast::Token::Semicolon)?;
@@ -115,19 +155,136 @@ impl ParserState {
     }
 
     fn parse_expression(&mut self) -> ParseResult<ast::Expression> {
-        self.parse_equality_expression()
+        self.parse_assignment_expression()
+    }
+
+    fn parse_assignment_expression(&mut self) -> ParseResult<ast::Expression> {
+        let mut equality_expression = self.parse_equality_expression()?;
+        loop {
+            let (op, double) = match self.input.double_peek() {
+                (Some(&ast::Token::Plus), Some(&ast::Token::Equals)) => {
+                    (ast::BinOp::AssignSum, true)
+                }
+                (Some(&ast::Token::Minus), Some(&ast::Token::Equals)) => {
+                    (ast::BinOp::AssignDifference, true)
+                }
+                (Some(&ast::Token::Star), Some(&ast::Token::Equals)) => {
+                    (ast::BinOp::AssignProduct, true)
+                }
+                (Some(&ast::Token::Divide), Some(&ast::Token::Equals)) => {
+                    (ast::BinOp::AssignQuotient, true)
+                }
+                (Some(&ast::Token::Equals), _) => (ast::BinOp::Assign, false),
+                _ => {
+                    return Ok(equality_expression);
+                }
+            };
+
+            self.input.pop();
+            if double {
+                self.input.pop();
+            }
+
+            let next_equality = self.parse_equality_expression()?;
+
+            equality_expression =
+                ast::Expression::new_binop(op, equality_expression.into(), next_equality.into());
+        }
     }
 
     fn parse_equality_expression(&mut self) -> ParseResult<ast::Expression> {
-        let relational_expression = self.parse_relational_expression()?;
+        let mut relational_expression = self.parse_relational_expression()?;
 
-        todo!("parse != and == if present");
+        //TODO: refactor this like the above one
+        loop {
+            match self.input.double_peek() {
+                (Some(&ast::Token::Equals), Some(&ast::Token::Equals)) => {
+                    self.input.pop();
+                    self.input.pop();
+
+                    let next_relational = self.parse_relational_expression()?;
+
+                    relational_expression = ast::Expression::new_binop(
+                        ast::BinOp::Equals,
+                        relational_expression.into(),
+                        next_relational.into(),
+                    );
+                }
+                (Some(&ast::Token::Not), Some(&ast::Token::Equals)) => {
+                    self.input.pop();
+                    self.input.pop();
+
+                    let next_relational = self.parse_relational_expression()?;
+
+                    relational_expression = ast::Expression::new_binop(
+                        ast::BinOp::NotEquals,
+                        relational_expression.into(),
+                        next_relational.into(),
+                    );
+                }
+                _ => {
+                    return Ok(relational_expression);
+                }
+            }
+        }
     }
 
     fn parse_relational_expression(&mut self) -> ParseResult<ast::Expression> {
-        let additive_expression = self.parse_additive_expression()?;
+        let mut additive_expression = self.parse_additive_expression()?;
 
-        todo!("parse <, >, <=, and >=  if present");
+        loop {
+            match self.input.double_peek() {
+                (Some(&ast::Token::LessThan), Some(&ast::Token::LessThan)) => {
+                    self.input.pop();
+                    self.input.pop();
+
+                    let next_additive = self.parse_additive_expression()?;
+
+                    additive_expression = ast::Expression::new_binop(
+                        ast::BinOp::LeftBitShift,
+                        additive_expression.into(),
+                        next_additive.into(),
+                    );
+                }
+                (Some(&ast::Token::LessThan), Some(_)) => {
+                    self.input.pop();
+
+                    let next_additive = self.parse_additive_expression()?;
+
+                    additive_expression = ast::Expression::new_binop(
+                        ast::BinOp::LessThan,
+                        additive_expression.into(),
+                        next_additive.into(),
+                    );
+                }
+                (Some(&ast::Token::GreaterThan), Some(&ast::Token::GreaterThan)) => {
+                    self.input.pop();
+                    self.input.pop();
+
+                    let next_additive = self.parse_additive_expression()?;
+
+                    additive_expression = ast::Expression::new_binop(
+                        ast::BinOp::RightBitShift,
+                        additive_expression.into(),
+                        next_additive.into(),
+                    );
+                }
+                (Some(&ast::Token::GreaterThan), Some(_)) => {
+                    self.input.pop();
+
+                    let next_additive = self.parse_additive_expression()?;
+
+                    additive_expression = ast::Expression::new_binop(
+                        ast::BinOp::GreaterThan,
+                        additive_expression.into(),
+                        next_additive.into(),
+                    );
+                }
+                _ => {
+                    return Ok(additive_expression);
+                }
+            }
+        }
     }
 
     fn parse_additive_expression(&mut self) -> ParseResult<ast::Expression> {

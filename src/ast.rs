@@ -68,6 +68,7 @@ pub enum TypeDefinition {
 pub enum Statement {
     JumpStatement(JumpStatement),
     WhileStatement(WhileStatement),
+    IfStatement(IfStatement),
     DeclarationStatement(DeclarationStatement),
     CompoundStatement(Vec<Statement>),
     Expression(Expression),
@@ -89,7 +90,14 @@ pub enum JumpStatement {
 #[derive(Debug, Clone, PartialEq)]
 pub struct WhileStatement {
     pub condition_expression: Expression,
-    pub loop_body: Box<Statement>
+    pub loop_body: Box<Statement>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct IfStatement {
+    pub condition_expression: Expression,
+    pub if_body: Box<Statement>,
+    pub else_body: Option<Box<Statement>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -98,6 +106,17 @@ pub enum BinOp {
     Difference,
     Product,
     Quotient,
+    AssignSum,
+    AssignDifference,
+    AssignProduct,
+    AssignQuotient,
+    Assign,
+    Equals,
+    NotEquals,
+    GreaterThan,
+    LessThan,
+    LeftBitShift,
+    RightBitShift,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -177,7 +196,7 @@ impl IntoIterator for Statement {
     fn into_iter(self) -> Self::IntoIter {
         match self {
             Statement::CompoundStatement(statements) => statements.into_iter(),
-            _ => unimplemented!()
+            _ => unimplemented!(),
         }
     }
 }
@@ -186,7 +205,7 @@ impl Statement {
     pub fn iter(&self) -> std::slice::Iter<Statement> {
         match self {
             Statement::CompoundStatement(statements) => statements.iter(),
-            _ => unimplemented!()
+            _ => unimplemented!(),
         }
     }
 
@@ -195,7 +214,6 @@ impl Statement {
         F: FnMut(&Statement) -> (),
     {
         f(self);
-
 
         // TODO: when statements can be nested, this needs to visit all of them!
         match self {
@@ -206,12 +224,18 @@ impl Statement {
             // These statements can contain other statements, visit them
             Statement::WhileStatement(w) => {
                 w.loop_body.visit_statements(f);
-            },
+            }
+            Statement::IfStatement(i) => {
+                i.if_body.visit_statements(f);
+                if let Some(else_body) = &i.else_body {
+                    else_body.visit_statements(f);
+                }
+            }
             Statement::CompoundStatement(statements) => {
                 for statement in statements {
                     statement.visit_statements(f);
                 }
-            },
+            }
         }
     }
 }
