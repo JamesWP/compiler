@@ -1,5 +1,6 @@
 use crate::ast;
 use crate::intern;
+use crate::labels;
 use crate::platform;
 use crate::platform::DecimalLiteral as DL;
 use crate::platform::StackRelativeLocation;
@@ -11,6 +12,7 @@ struct CompilationState {
     output: String,
     function_stack_frame: Option<platform::StackLayout>,
     pub intern: intern::Intern,
+    pub labels: labels::LabelAllocator,
 }
 
 impl Default for CompilationState {
@@ -19,6 +21,7 @@ impl Default for CompilationState {
             output: String::new(),
             function_stack_frame: None,
             intern: intern::Intern::new(),
+            labels: labels::LabelAllocator::default()
         }
     }
 }
@@ -218,7 +221,49 @@ impl CompilationState {
                 assemble!(self, "ret");
             }
             ast::Statement::WhileStatement(_) => todo!(),
-            ast::Statement::IfStatement(_) => todo!(),
+            ast::Statement::IfStatement(ast::IfStatement {
+                condition_expression,
+                if_body,
+                else_body,
+            }) => {
+                self.compile_expression(condition_expression)?;
+               
+                if let Some(else_body) = else_body {
+                    let else_label = self.labels.allocate_label();
+                    let end_label = self.labels.allocate_label();
+
+                    // jump to else if $eax == zero
+                    assemble!(self, "cmp", DL::new(0), reg::RAX);
+                    assemble!(self, "jz", else_label);
+
+                    // --[if body]
+                    self.compile_statement(if_body);
+
+                    // -- jump to end
+                    assemble!(self, "jmp", end_label);
+
+                    // else:
+                    self.output_label(else_label);
+
+                    // --[else body]
+                    self.compile_statement(else_body);
+
+                    // end: 
+                    self.output_label(end_label);
+
+                } else {
+                    let end_label = self.labels.allocate_label();
+
+                    // jump to end if $eax == zero
+                    assemble!(self, "jz", end_label);
+
+                    // --[if body]
+                    self.compile_statement(if_body);
+
+                    // end: 
+                    self.output_label(end_label);
+                }
+            }
             ast::Statement::DeclarationStatement(declaration) => {
                 let name = &declaration.name;
                 let location = self
