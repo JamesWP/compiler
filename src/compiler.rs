@@ -284,7 +284,9 @@ impl CompilationState {
                 self.compile_expression(e)?;
             }
             ast::Statement::CompoundStatement(statements) => {
-                unimplemented!();
+                for statement in statements {
+                    self.compile_statement(statement)?;
+                }
             }
         }
 
@@ -294,6 +296,7 @@ impl CompilationState {
     fn compile_expression(&mut self, expression: &ast::Expression) -> std::io::Result<()> {
         let result_64 = reg::RAX;
         let result_32 = reg::EAX;
+        let result_8 = reg::AL;
         match &expression.node {
             ast::ExpressionNode::Binary(op, lhs, rhs) => {
                 self.compile_expression(rhs.as_ref())?;
@@ -314,6 +317,24 @@ impl CompilationState {
                     }
                     ast::BinOp::Quotient => {
                         assemble!(self, "divl", StackRelativeLocation::top_32());
+                    }
+                    ast::BinOp::Equals => {
+                        assemble!(self, "cmp", StackRelativeLocation::top_32(), result_32);
+                        assemble!(self, "sete", result_8);
+                    }
+                    ast::BinOp::NotEquals => {
+                        assemble!(self, "cmp", StackRelativeLocation::top_32(), result_32);
+                        assemble!(self, "setne", result_8);
+                    }
+                    ast::BinOp::LessThan => {
+                        // signed
+                        assemble!(self, "cmp", StackRelativeLocation::top_32(), result_32);
+                        assemble!(self, "setb", result_8);
+                    }
+                    ast::BinOp::GreaterThan => {
+                        // signed
+                        assemble!(self, "cmp", StackRelativeLocation::top_32(), result_32);
+                        assemble!(self, "setg", result_8);
                     }
                     _ => todo!("implement binop {:?}", op),
                 }

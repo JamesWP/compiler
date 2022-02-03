@@ -1,19 +1,16 @@
-int thing(int a, int b) {
-    if (a == b) {
-        return 1;
-    }
+int main(int argc, const char* argv[]) {
+    int a = 1;
+    int b = 1;
 
-    if (a == 3) {
+    //if (1==1) {
+    //    return 0;
+    //}
+
+    a = a + 1;
+    if (a == 2) {
         return 0;
     }
-}
 
-int bval(int a) {
-    return a == 123;
-}
 
-int main(int argc, const char* argv[]) {
-    int a = 1+2;
-    int b = bval(a);
-    return thing(a, 1000);
+    return 1;
 }
