@@ -309,7 +309,23 @@ impl CompilationState {
                 post_amble(self);
                 assemble!(self, "ret");
             }
-            ast::Statement::WhileStatement(_) => todo!(),
+            ast::Statement::WhileStatement(ast::WhileStatement{condition_expression, loop_body}) => {
+                let start_label = self.labels.allocate_label();
+                let end_label = self.labels.allocate_label();
+                // start_label:
+                self.output_label(&start_label)?;
+                //   evaluate condition
+                self.compile_expression(condition_expression)?;
+                assemble!(self, "cmp", DL::new(0), reg::RAX);
+                assemble!(self, "jz", &end_label);
+                //   if condition is not met jump to end_label
+                //   while body
+                self.compile_statement(loop_body)?;
+                assemble!(self, "jmp", &start_label);
+                //   jump to start
+                // end_label:
+                self.output_label(end_label)?;
+            },
             ast::Statement::IfStatement(ast::IfStatement {
                 condition_expression,
                 if_body,
@@ -387,21 +403,32 @@ impl CompilationState {
         let result_8 = reg::AL;
         match &expression.node {
             ast::ExpressionNode::Binary(ast::BinOp::Assign(op), lhs, rhs) => {
-                // Put the store address on the stack
+                // Put the lhs address on the stack
                 self.compile_address(lhs)?;
                 self.push();
 
-                // Put the value to be stored in RAX
+                // Put the rhs value in RDI
                 self.compile_expression(rhs)?;
+                assemble!(self, "mov", reg::RAX, reg::RDI);
+
+                // Put the lhs value in RAX
+                assemble!(self, "mov", RegisterIndirectLocation::new(reg::RSP), reg::RAX); // The stack pointer points to the stack,
+                assemble!(self, "movl", RegisterIndirectLocation::new(reg::RAX), reg::EAX); // And the value in the stack is a pointer to the value we want
 
                 if let Some(op) = op {
                     match op {
                         ast::AssignOp::Sum => {
-                            assemble!(self, "addl", RegisterIndirectLocation::new(reg::RSP), reg::EAX);
+                            assemble!(self, "addl", reg::EDI, reg::EAX);
                         },
-                        ast::AssignOp::Difference => todo!(),
-                        ast::AssignOp::Product => todo!(),
-                        ast::AssignOp::Quotient => todo!(),
+                        ast::AssignOp::Difference => {
+                            assemble!(self, "subl", reg::EDI, reg::EAX);
+                        },
+                        ast::AssignOp::Product => {
+                            assemble!(self, "mull", reg::EDI);
+                        },
+                        ast::AssignOp::Quotient => {
+                            assemble!(self, "divl", reg::EDI);
+                        },
                     }
                 }
 
