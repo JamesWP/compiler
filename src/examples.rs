@@ -116,6 +116,9 @@ pub fn test() {
     let mut has_failed = false;
 
     for (key, group) in &examples {
+        if has_failed {
+            break; // no hard feelings
+        }
         let mut has_this_failed = false;
         println!("=============================");
         println!("======== Example {:02} =========", key);
