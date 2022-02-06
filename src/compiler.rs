@@ -3,6 +3,7 @@ use crate::intern;
 use crate::labels;
 use crate::platform;
 use crate::platform::DecimalLiteral as DL;
+use crate::platform::RegisterIndirectLocation;
 use crate::platform::StackRelativeLocation;
 use crate::platform::X86_64Reg as reg;
 use std::fmt::Display;
@@ -21,7 +22,7 @@ impl Default for CompilationState {
             output: String::new(),
             function_stack_frame: None,
             intern: intern::Intern::new(),
-            labels: labels::LabelAllocator::default()
+            labels: labels::LabelAllocator::default(),
         }
     }
 }
@@ -196,10 +197,98 @@ impl CompilationState {
         Ok(())
     }
 
-    fn compile_statement(&mut self, statement: &ast::Statement) -> std::io::Result<()> {
-        let result_64 = reg::RAX;
-        let result_32 = reg::EAX;
+    fn push(&mut self) {
+        assemble!(self, "pushq", reg::RAX);
+    }
 
+    fn pop(&mut self) {
+        assemble!(self, "add", DL::new(8), reg::RSP);
+    }
+
+    /// store the value in RAX into the address pointed to by the value in the top of the stack
+    /// also consumes the top of stack
+    fn compile_store(&mut self, type_def: &ast::TypeDefinition) -> std::io::Result<()> {
+        assemble!(self, "pop", reg::RDI);
+        match type_def.size() {
+            8 => assemble!(
+                self,
+                "mov",
+                reg::RAX,
+                RegisterIndirectLocation::new(reg::RDI)
+            ),
+            4 => assemble!(
+                self,
+                "movl",
+                reg::EAX,
+                RegisterIndirectLocation::new(reg::RDI)
+            ),
+            s => unimplemented!("size error, {}", s),
+        }
+        Ok(())
+    }
+
+    fn compile_load(&mut self, type_def: &ast::TypeDefinition) -> std::io::Result<()> {
+        let load_size = type_def.size();
+        match type_def {
+            ast::TypeDefinition::FUNCTION(_, _, _) => {
+                // functions are code, we don't load code
+            }
+            _ => match load_size {
+                8 => assemble!(
+                    self,
+                    "mov",
+                    RegisterIndirectLocation::new(reg::RAX),
+                    reg::RAX
+                ),
+                4 => assemble!(
+                    self,
+                    "movl",
+                    RegisterIndirectLocation::new(reg::RAX),
+                    reg::EAX
+                ),
+                s => unimplemented!("size error, {}", s),
+            },
+        }
+        Ok(())
+    }
+
+    fn compile_address(&mut self, expression: &ast::Expression) -> std::io::Result<()> {
+        match &expression.node {
+            ast::ExpressionNode::Binary(_, _, _) => todo!(),
+            ast::ExpressionNode::Value(v) => match v {
+                ast::Value::Literal(l) => match l {
+                    ast::LiteralValue::Int32(_) => todo!(),
+                    ast::LiteralValue::StringLiteral(value) => {
+                        let label = self.intern.add(&value);
+                        assemble!(self, "lea", format!("{}(%rip)", label), reg::RAX);
+                        Ok(())
+                    }
+                },
+                ast::Value::Identifier(ident) => match expression.expr_type {
+                    ast::TypeDefinition::FUNCTION(_, _, true) => {
+                        assemble!(self, "lea", format!("{}(%rip)", ident), reg::RAX);
+                        Ok(())
+                    }
+                    ast::TypeDefinition::FUNCTION(_, _, false) => {
+                        assemble!(self, "mov", format!("{}@GOTPCREL(%rip)", ident), reg::RAX);
+                        Ok(())
+                    }
+                    _ => {
+                        let location = self
+                            .function_stack_frame
+                            .as_ref()
+                            .unwrap()
+                            .get_location(&ident)?;
+                        assemble!(self, "lea", location, reg::RAX);
+                        Ok(())
+                    }
+                },
+            },
+            ast::ExpressionNode::Call(_, _) => todo!(),
+        }
+    }
+
+    fn compile_statement(&mut self, statement: &ast::Statement) -> std::io::Result<()> {
         let post_amble = |state: &mut CompilationState| {
             let stack_size = state.function_stack_frame.as_ref().unwrap().stack_size;
             if stack_size != 0 {
@@ -227,7 +316,7 @@ impl CompilationState {
                 else_body,
             }) => {
                 self.compile_expression(condition_expression)?;
-               
+
                 if let Some(else_body) = else_body {
                     let else_label = self.labels.allocate_label();
                     let end_label = self.labels.allocate_label();
@@ -237,20 +326,19 @@ impl CompilationState {
                     assemble!(self, "jz", else_label);
 
                     // --[if body]
-                    self.compile_statement(if_body);
+                    self.compile_statement(if_body)?;
 
                     // -- jump to end
                     assemble!(self, "jmp", end_label);
 
                     // else:
-                    self.output_label(else_label);
+                    self.output_label(else_label)?;
 
                     // --[else body]
-                    self.compile_statement(else_body);
+                    self.compile_statement(else_body)?;
 
-                    // end: 
-                    self.output_label(end_label);
-
+                    // end:
+                    self.output_label(end_label)?;
                 } else {
                     let end_label = self.labels.allocate_label();
 
@@ -258,26 +346,26 @@ impl CompilationState {
                     assemble!(self, "jz", end_label);
 
                     // --[if body]
-                    self.compile_statement(if_body);
+                    self.compile_statement(if_body)?;
 
-                    // end: 
-                    self.output_label(end_label);
+                    // end:
+                    self.output_label(end_label)?;
                 }
             }
             ast::Statement::DeclarationStatement(declaration) => {
                 let name = &declaration.name;
-                let location = self
-                    .function_stack_frame
-                    .as_ref()
-                    .unwrap()
-                    .get_location(name)?;
+
                 if let Some(e) = &declaration.expression {
+                    // Store address is pushed onto the stack
+                    self.compile_address(&ast::Expression::new_value(
+                        ast::Value::Identifier(name.to_string()),
+                        declaration.decl_type.to_owned(),
+                    ))?;
+                    self.push(); // This is consumed by compile_store
+
+                    // Value to store is placed in RAX
                     self.compile_expression(&e)?;
-                    match location.size {
-                        8 => assemble!(self, "mov", result_64, location),
-                        4 => assemble!(self, "movl", result_32, location),
-                        s => unimplemented!("size error, {}", s),
-                    }
+                    self.compile_store(&declaration.decl_type)?; // Stack popped here
                 }
             }
             ast::Statement::Expression(e) => {
@@ -294,79 +382,85 @@ impl CompilationState {
     }
 
     fn compile_expression(&mut self, expression: &ast::Expression) -> std::io::Result<()> {
-        let result_64 = reg::RAX;
+        let _result_64 = reg::RAX;
         let result_32 = reg::EAX;
         let result_8 = reg::AL;
         match &expression.node {
+            ast::ExpressionNode::Binary(ast::BinOp::Assign(op), lhs, rhs) => {
+                // Put the store address on the stack
+                self.compile_address(lhs)?;
+                self.push();
+
+                // Put the value to be stored in RAX
+                self.compile_expression(rhs)?;
+
+                if let Some(op) = op {
+                    match op {
+                        ast::AssignOp::Sum => {
+                            assemble!(self, "addl", RegisterIndirectLocation::new(reg::RSP), reg::EAX);
+                        },
+                        ast::AssignOp::Difference => todo!(),
+                        ast::AssignOp::Product => todo!(),
+                        ast::AssignOp::Quotient => todo!(),
+                    }
+                }
+
+                self.compile_store(&lhs.expr_type)?; // pops the stack
+            }
             ast::ExpressionNode::Binary(op, lhs, rhs) => {
                 self.compile_expression(rhs.as_ref())?;
 
-                assemble!(self, "pushq", result_64);
-
+                self.push();
                 self.compile_expression(&lhs)?;
 
                 match op {
                     ast::BinOp::Sum => {
-                        assemble!(self, "addl", StackRelativeLocation::top_32(), result_32);
+                        assemble!(self, "addl", StackRelativeLocation::top(), result_32);
                     }
                     ast::BinOp::Difference => {
-                        assemble!(self, "subl", StackRelativeLocation::top_32(), result_32);
+                        assemble!(self, "subl", StackRelativeLocation::top(), result_32);
                     }
                     ast::BinOp::Product => {
-                        assemble!(self, "mull", StackRelativeLocation::top_32());
+                        assemble!(self, "mull", StackRelativeLocation::top());
                     }
                     ast::BinOp::Quotient => {
-                        assemble!(self, "divl", StackRelativeLocation::top_32());
+                        assemble!(self, "divl", StackRelativeLocation::top());
                     }
                     ast::BinOp::Equals => {
-                        assemble!(self, "cmp", StackRelativeLocation::top_32(), result_32);
+                        assemble!(self, "cmp", StackRelativeLocation::top(), result_32);
                         assemble!(self, "sete", result_8);
                     }
                     ast::BinOp::NotEquals => {
-                        assemble!(self, "cmp", StackRelativeLocation::top_32(), result_32);
+                        assemble!(self, "cmp", StackRelativeLocation::top(), result_32);
                         assemble!(self, "setne", result_8);
                     }
                     ast::BinOp::LessThan => {
                         // signed
-                        assemble!(self, "cmp", StackRelativeLocation::top_32(), result_32);
+                        assemble!(self, "cmp", StackRelativeLocation::top(), result_32);
                         assemble!(self, "setb", result_8);
                     }
                     ast::BinOp::GreaterThan => {
                         // signed
-                        assemble!(self, "cmp", StackRelativeLocation::top_32(), result_32);
+                        assemble!(self, "cmp", StackRelativeLocation::top(), result_32);
                         assemble!(self, "setg", result_8);
                     }
                     _ => todo!("implement binop {:?}", op),
                 }
 
-                // Balance the stack
-                assemble!(self, "add", DL::new(8), reg::RSP);
+                self.pop();
             }
             ast::ExpressionNode::Value(v) => match v {
                 ast::Value::Literal(l) => match l {
                     ast::LiteralValue::Int32(value) => {
                         assemble!(self, "movl", DL::new(value), result_32);
                     }
-                    ast::LiteralValue::StringLiteral(value) => {
-                        let label = self.intern.add(&value);
-                        assemble!(self, "lea", format!("{}(%rip)", label), result_64);
+                    ast::LiteralValue::StringLiteral(_) => {
+                        self.compile_address(expression)?;
                     }
                 },
-                ast::Value::Identifier(name) => {
-                    if let ast::TypeDefinition::FUNCTION(_, _, is_local) = expression.expr_type {
-                        if is_local {
-                            assemble!(self, "lea", format!("{}(%rip)", name), result_64);
-                        } else {
-                            assemble!(self, "mov", format!("{}@GOTPCREL(%rip)", name), result_64);
-                        }
-                    } else {
-                        let location = self
-                            .function_stack_frame
-                            .as_ref()
-                            .unwrap()
-                            .get_location(&name)?;
-                        assemble!(self, "movl", location, result_32);
-                    }
+                ast::Value::Identifier(_) => {
+                    self.compile_address(expression)?;
+                    self.compile_load(&expression.expr_type)?;
                 }
             },
             ast::ExpressionNode::Call(lhs, args) => {

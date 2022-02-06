@@ -1,5 +1,3 @@
-use std::ops::DerefMut;
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum ResWord {
     Return,
@@ -31,6 +29,14 @@ pub enum Token {
     Star,
     LessThan,
     GreaterThan,
+    LeftBitShift,
+    RightBitShift,
+    Equality,
+    NotEquality,
+    PlusEquals,
+    MinusEquals,
+    DivideEquals,
+    MultiplyEquals,
     Not,
 }
 
@@ -101,16 +107,20 @@ pub struct IfStatement {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum AssignOp {
+    Sum,
+    Difference,
+    Product,
+    Quotient
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum BinOp {
     Sum,
     Difference,
     Product,
     Quotient,
-    AssignSum,
-    AssignDifference,
-    AssignProduct,
-    AssignQuotient,
-    Assign,
+    Assign(Option<AssignOp>),
     Equals,
     NotEquals,
     GreaterThan,

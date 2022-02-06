@@ -6,7 +6,7 @@ int main(int argc, const char* argv[]) {
     //    return 0;
     //}
 
-    a = a + 1;
+    a += 1;
     if (a == 2) {
         return 0;
     }

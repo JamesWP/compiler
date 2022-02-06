@@ -5,7 +5,7 @@ use std::fmt::Display;
 #[derive(Clone, PartialEq)]
 #[allow(dead_code)]
 pub enum X86_64Reg {
-    AL, // register al lower 8 bits of a register
+    AL,   // register al lower 8 bits of a register
     RAX,  // register a extended
     RBX,  // register b extended
     RCX,  // register c extended
@@ -48,6 +48,11 @@ pub struct StackRelativeLocation {
     offset: i32,
     // size of location,
     pub size: usize,
+}
+
+#[derive(Clone)]
+pub struct RegisterIndirectLocation {
+    reg: X86_64Reg,
 }
 
 pub struct StackLayout {
@@ -221,7 +226,7 @@ impl StackRelativeLocation {
             size,
         }
     }
-    pub fn top_32() -> StackRelativeLocation {
+    pub fn top() -> StackRelativeLocation {
         StackRelativeLocation {
             reg: X86_64Reg::RSP,
             offset: 0,
@@ -230,9 +235,22 @@ impl StackRelativeLocation {
     }
 }
 
+impl RegisterIndirectLocation {
+    pub fn new(reg: X86_64Reg) -> RegisterIndirectLocation {
+        RegisterIndirectLocation { reg }
+    }
+}
+
 impl Display for StackRelativeLocation {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         write!(formatter, "{}({})", self.offset, self.reg)?;
+        Ok(())
+    }
+}
+
+impl Display for RegisterIndirectLocation {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(formatter, "({})", self.reg)?;
         Ok(())
     }
 }

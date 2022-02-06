@@ -3,12 +3,12 @@ mod compiler;
 mod examples;
 mod fileiter;
 mod intern;
+mod labels;
 mod lexer;
 mod parser;
 mod platform;
 mod scope;
 mod stringiter;
-mod labels;
 
 fn main() -> std::io::Result<()> {
     let mut filename = "examples/01_simple.c".to_owned();
@@ -46,18 +46,9 @@ fn main() -> std::io::Result<()> {
     let file = fileiter::FileIter::from(std::fs::File::open(filename.clone())?);
     let lexer = lexer::Lexer::new(Box::new(file), &filename);
 
-    if print_lex {
-        for (_loc, toc) in lexer {
-            print!("[{:?}] ", toc);
-        }
-        println!("");
-
-        return Ok(());
-    }
-
-    let parser_input = lexer.map(|(_l, t)| t).collect::<Vec<_>>();
-
-    let translation_unit = parser::ParserState::new(parser_input.into()).parse_translation_unit();
+    let parser_input:parser::ParserInput = lexer.map(|(_l, t)| t).collect::<Vec<_>>().into();
+    let parser_input = if print_lex { parser_input.enable_debug() } else { parser_input };
+    let translation_unit = parser::ParserState::new(parser_input).parse_translation_unit();
 
     if translation_unit.is_err() {
         return Err(std::io::Error::new(

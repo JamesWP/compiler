@@ -150,7 +150,7 @@ impl Iterator for Lexer {
         self.skip_comments().ok()?;
 
         let start = self.source.pos();
-        let char = self.source.next()?;
+        let char: char = self.source.next()?;
 
         let token = match &char {
             '{' | '}' | '(' | ')' | '[' | ']' => Token::Paren(char),
@@ -177,13 +177,29 @@ impl Iterator for Lexer {
                 let token = token.replace("\\n", "\n");
                 Token::StringLiteral(token.to_owned())
             }
-            '/' => Token::Divide,
-            '+' => Token::Plus,
-            '-' => Token::Minus,
-            '=' => Token::Equals,
-            '*' => Token::Star,
-            '<' => Token::LessThan,
-            '>' => Token::GreaterThan,
+            '/' | '+' | '-' | '*' | '<' | '>' | '=' => {
+                let t = char;
+                let n = self.source.peek();
+
+                match (t, n) {
+                    ('/',Some('=')) => { self.source.next(); Token::DivideEquals},
+                    ('*',Some('=')) => { self.source.next(); Token::MultiplyEquals},
+                    ('-',Some('=')) => { self.source.next(); Token::MinusEquals},
+                    ('+',Some('=')) => { self.source.next(); Token::PlusEquals},
+                    ('<',Some('<')) => { self.source.next(); Token::LeftBitShift},
+                    ('>',Some('>')) => { self.source.next(); Token::RightBitShift},
+                    ('=',Some('=')) => { self.source.next(); Token::Equality},
+                    ('!',Some('=')) => { self.source.next(); Token::NotEquality},
+                    ('=',_) => Token::Equals,
+                    ('*',_) => Token::Star,
+                    ('/',_) => Token::Divide,
+                    ('-',_) => Token::Minus,
+                    ('+',_) => Token::Plus,
+                    ('<',_) => Token::LessThan,
+                    ('>',_) => Token::GreaterThan,
+                    _=> unreachable!()
+                }
+            },
             '!' => Token::Not,
             '.' => {
                 let token = self.read_token(char, |c| c == '.');
