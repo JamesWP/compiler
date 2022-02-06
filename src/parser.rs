@@ -130,7 +130,6 @@ impl ParserState {
                 else_body,
             }))
         } else if is_type_decl(self.input.peek()) {
-            println!("parse type def");
             let base_type = self.parse_declaration_specifiers()?;
             let (name, decl_type) = self.parse_declarator(base_type)?;
             self.scope.define(&name, &decl_type);
@@ -164,7 +163,6 @@ impl ParserState {
     }
 
     fn parse_assignment_expression(&mut self) -> ParseResult<ast::Expression> {
-        println!("ParseAssign Begin");
         let mut equality_expression = self.parse_equality_expression()?;
         loop {
             let op = match self.input.peek() {
@@ -174,13 +172,10 @@ impl ParserState {
                 Some(&ast::Token::DivideEquals) => ast::BinOp::Assign(Some(ast::AssignOp::Quotient)),
                 Some(&ast::Token::Equals) => ast::BinOp::Assign(None),
                 _ => {
-                    println!("ParseAssign Done");
                     return Ok(equality_expression);
                 }
             };
             
-            println!("ParseAssign op {:?}", op);
-
             self.input.pop();
 
             let next_equality = self.parse_equality_expression()?;
