@@ -74,10 +74,6 @@ fn is_type_decl(token: Option<&ast::Token>) -> bool {
     }
 }
 
-fn is_unary_expression(_token: Option<&ast::Token>) -> bool {
-    todo!();
-}
-
 impl ParserState {
     pub fn new(input: ParserInput) -> ParserState {
         ParserState {

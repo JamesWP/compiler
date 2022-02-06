@@ -1,3 +1,4 @@
+#[cfg(test)]
 fn go(name: &str, command: &mut std::process::Command) -> bool {
     let args: Vec<_> = command
         .get_args()
@@ -42,6 +43,7 @@ fn go(name: &str, command: &mut std::process::Command) -> bool {
     result.is_ok()
 }
 
+#[cfg(test)]
 fn native_compile(source_file: &str, object_file: &str) -> bool {
     go(
         "NATIVE CC",
@@ -53,6 +55,7 @@ fn native_compile(source_file: &str, object_file: &str) -> bool {
     )
 }
 
+#[cfg(test)]
 fn compile(source_file: &str, object_file: &str) -> bool {
     go(
         "COMPILER",
@@ -63,6 +66,7 @@ fn compile(source_file: &str, object_file: &str) -> bool {
     )
 }
 
+#[cfg(test)]
 fn link(executable_file: &str, object_files: &[String]) -> bool {
     go(
         "LINK",
@@ -73,6 +77,7 @@ fn link(executable_file: &str, object_files: &[String]) -> bool {
     )
 }
 
+#[cfg(test)]
 fn run(executable_file: &str) -> bool {
     go(
         "RUN",

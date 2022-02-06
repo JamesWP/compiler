@@ -315,5 +315,5 @@ impl StackLayout {
 
 #[test]
 pub fn test_stack_allocate() {
-    let mut_layout = StackLayout::default();
+    let _mut_layout = StackLayout::default();
 }

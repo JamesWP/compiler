@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::ast::{TypeDefinition, TypeQualifier};
+use crate::ast::{TypeDefinition};
 #[derive(Default)]
 pub struct Scope {
     file: HashMap<String, TypeDefinition>,
@@ -121,6 +121,9 @@ impl Scope {
         return self.file.get(&name);
     }
 }
+
+#[cfg(test)]
+use crate::ast::TypeQualifier;
 
 #[test]
 fn test_scope() {
