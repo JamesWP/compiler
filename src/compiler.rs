@@ -207,6 +207,7 @@ impl CompilationState {
 
     /// store the value in RAX into the address pointed to by the value in the top of the stack
     /// also consumes the top of stack
+    /// leaves the value stored in RAX
     fn compile_store(&mut self, type_def: &ast::TypeDefinition) -> std::io::Result<()> {
         assemble!(self, "pop", reg::RDI);
         match type_def.size() {
