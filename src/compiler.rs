@@ -290,6 +290,7 @@ impl CompilationState {
     }
 
     fn compile_statement(&mut self, statement: &ast::Statement) -> std::io::Result<()> {
+        self.output_comment(format!("-stmt {:?}", statement));
         let post_amble = |state: &mut CompilationState| {
             let stack_size = state.function_stack_frame.as_ref().unwrap().stack_size;
             if stack_size != 0 {
@@ -360,6 +361,7 @@ impl CompilationState {
                     let end_label = self.labels.allocate_label();
 
                     // jump to end if $eax == zero
+                    assemble!(self, "cmp", DL::new(0), reg::RAX);
                     assemble!(self, "jz", end_label);
 
                     // --[if body]
@@ -410,13 +412,14 @@ impl CompilationState {
 
                 // Put the rhs value in RDI
                 self.compile_expression(rhs)?;
-                assemble!(self, "mov", reg::RAX, reg::RDI);
-
-                // Put the lhs value in RAX
-                assemble!(self, "mov", RegisterIndirectLocation::new(reg::RSP), reg::RAX); // The stack pointer points to the stack,
-                assemble!(self, "movl", RegisterIndirectLocation::new(reg::RAX), reg::EAX); // And the value in the stack is a pointer to the value we want
 
                 if let Some(op) = op {
+                    assemble!(self, "mov", reg::RAX, reg::RDI);
+
+                    // Put the lhs value in RAX
+                    assemble!(self, "mov", RegisterIndirectLocation::new(reg::RSP), reg::RAX); // The stack pointer points to the stack,
+                    assemble!(self, "movl", RegisterIndirectLocation::new(reg::RAX), reg::EAX); // And the value in the stack is a pointer to the value we want
+
                     match op {
                         ast::AssignOp::Sum => {
                             assemble!(self, "addl", reg::EDI, reg::EAX);
