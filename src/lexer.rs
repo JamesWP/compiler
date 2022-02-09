@@ -177,7 +177,7 @@ impl Iterator for Lexer {
                 let token = token.replace("\\n", "\n");
                 Token::StringLiteral(token.to_owned())
             }
-            '/' | '+' | '-' | '*' | '<' | '>' | '=' => {
+            '/' | '+' | '-' | '*' | '<' | '>' | '=' | '!' => {
                 let t = char;
                 let n = self.source.peek();
 
@@ -197,10 +197,10 @@ impl Iterator for Lexer {
                     ('+',_) => Token::Plus,
                     ('<',_) => Token::LessThan,
                     ('>',_) => Token::GreaterThan,
+                    ('!',_) => Token::Not,
                     _=> unreachable!()
                 }
             },
-            '!' => Token::Not,
             '.' => {
                 let token = self.read_token(char, |c| c == '.');
                 if token == "..." {
