@@ -290,7 +290,8 @@ impl CompilationState {
     }
 
     fn compile_statement(&mut self, statement: &ast::Statement) -> std::io::Result<()> {
-        self.output_comment(format!("-stmt {:?}", statement));
+        //self.output_comment(format!("-stmt {:?}", statement));
+        self.output_comment("");
         let post_amble = |state: &mut CompilationState| {
             let stack_size = state.function_stack_frame.as_ref().unwrap().stack_size;
             if stack_size != 0 {
@@ -311,7 +312,10 @@ impl CompilationState {
                 post_amble(self);
                 assemble!(self, "ret");
             }
-            ast::Statement::WhileStatement(ast::WhileStatement{condition_expression, loop_body}) => {
+            ast::Statement::WhileStatement(ast::WhileStatement {
+                condition_expression,
+                loop_body,
+            }) => {
                 let start_label = self.labels.allocate_label();
                 let end_label = self.labels.allocate_label();
                 // start_label:
@@ -327,49 +331,52 @@ impl CompilationState {
                 //   jump to start
                 // end_label:
                 self.output_label(end_label)?;
-            },
+            }
             ast::Statement::IfStatement(ast::IfStatement {
                 condition_expression,
                 if_body,
-                else_body,
+                else_body: None,
             }) => {
                 self.compile_expression(condition_expression)?;
+                let end_label = self.labels.allocate_label();
 
-                if let Some(else_body) = else_body {
-                    let else_label = self.labels.allocate_label();
-                    let end_label = self.labels.allocate_label();
+                // jump to end if $eax == zero
+                assemble!(self, "cmp", DL::new(0), reg::RAX);
+                assemble!(self, "jz", end_label);
 
-                    // jump to else if $eax == zero
-                    assemble!(self, "cmp", DL::new(0), reg::RAX);
-                    assemble!(self, "jz", else_label);
+                // --[if body]
+                self.compile_statement(if_body)?;
 
-                    // --[if body]
-                    self.compile_statement(if_body)?;
+                // end:
+                self.output_label(end_label)?;
+            }
+            ast::Statement::IfStatement(ast::IfStatement {
+                condition_expression,
+                if_body,
+                else_body: Some(else_body),
+            }) => {
+                self.compile_expression(condition_expression)?;
+                let else_label = self.labels.allocate_label();
+                let end_label = self.labels.allocate_label();
 
-                    // -- jump to end
-                    assemble!(self, "jmp", end_label);
+                // jump to else if $eax == zero
+                assemble!(self, "cmp", DL::new(0), reg::RAX);
+                assemble!(self, "jz", else_label);
 
-                    // else:
-                    self.output_label(else_label)?;
+                // --[if body]
+                self.compile_statement(if_body)?;
 
-                    // --[else body]
-                    self.compile_statement(else_body)?;
+                // -- jump to end
+                assemble!(self, "jmp", end_label);
 
-                    // end:
-                    self.output_label(end_label)?;
-                } else {
-                    let end_label = self.labels.allocate_label();
+                // else:
+                self.output_label(else_label)?;
 
-                    // jump to end if $eax == zero
-                    assemble!(self, "cmp", DL::new(0), reg::RAX);
-                    assemble!(self, "jz", end_label);
+                // --[else body]
+                self.compile_statement(else_body)?;
 
-                    // --[if body]
-                    self.compile_statement(if_body)?;
-
-                    // end:
-                    self.output_label(end_label)?;
-                }
+                // end:
+                self.output_label(end_label)?;
             }
             ast::Statement::DeclarationStatement(declaration) => {
                 let name = &declaration.name;
@@ -417,22 +424,32 @@ impl CompilationState {
                     assemble!(self, "mov", reg::RAX, reg::RDI);
 
                     // Put the lhs value in RAX
-                    assemble!(self, "mov", RegisterIndirectLocation::new(reg::RSP), reg::RAX); // The stack pointer points to the stack,
-                    assemble!(self, "movl", RegisterIndirectLocation::new(reg::RAX), reg::EAX); // And the value in the stack is a pointer to the value we want
+                    assemble!(
+                        self,
+                        "mov",
+                        RegisterIndirectLocation::new(reg::RSP),
+                        reg::RAX
+                    ); // The stack pointer points to the stack,
+                    assemble!(
+                        self,
+                        "movl",
+                        RegisterIndirectLocation::new(reg::RAX),
+                        reg::EAX
+                    ); // And the value in the stack is a pointer to the value we want
 
                     match op {
                         ast::AssignOp::Sum => {
                             assemble!(self, "addl", reg::EDI, reg::EAX);
-                        },
+                        }
                         ast::AssignOp::Difference => {
                             assemble!(self, "subl", reg::EDI, reg::EAX);
-                        },
+                        }
                         ast::AssignOp::Product => {
                             assemble!(self, "mull", reg::EDI);
-                        },
+                        }
                         ast::AssignOp::Quotient => {
                             assemble!(self, "divl", reg::EDI);
-                        },
+                        }
                     }
                 }
 

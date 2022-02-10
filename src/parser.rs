@@ -55,7 +55,10 @@ impl ParserInput {
 impl From<Vec<ast::Token>> for ParserInput {
     fn from(mut val: Vec<ast::Token>) -> ParserInput {
         val.reverse();
-        ParserInput { tokens: val, print_lex: false }
+        ParserInput {
+            tokens: val,
+            print_lex: false,
+        }
     }
 }
 
@@ -163,15 +166,21 @@ impl ParserState {
         loop {
             let op = match self.input.peek() {
                 Some(&ast::Token::PlusEquals) => ast::BinOp::Assign(Some(ast::AssignOp::Sum)),
-                Some(&ast::Token::MinusEquals) => ast::BinOp::Assign(Some(ast::AssignOp::Difference)),
-                Some(&ast::Token::MultiplyEquals) => ast::BinOp::Assign(Some(ast::AssignOp::Product)),
-                Some(&ast::Token::DivideEquals) => ast::BinOp::Assign(Some(ast::AssignOp::Quotient)),
+                Some(&ast::Token::MinusEquals) => {
+                    ast::BinOp::Assign(Some(ast::AssignOp::Difference))
+                }
+                Some(&ast::Token::MultiplyEquals) => {
+                    ast::BinOp::Assign(Some(ast::AssignOp::Product))
+                }
+                Some(&ast::Token::DivideEquals) => {
+                    ast::BinOp::Assign(Some(ast::AssignOp::Quotient))
+                }
                 Some(&ast::Token::Equals) => ast::BinOp::Assign(None),
                 _ => {
                     return Ok(equality_expression);
                 }
             };
-            
+
             self.input.pop();
 
             let next_equality = self.parse_equality_expression()?;

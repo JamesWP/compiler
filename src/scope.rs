@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::ast::{TypeDefinition};
+use crate::ast::TypeDefinition;
 #[derive(Default)]
 pub struct Scope {
     file: HashMap<String, TypeDefinition>,

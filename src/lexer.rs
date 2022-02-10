@@ -182,25 +182,49 @@ impl Iterator for Lexer {
                 let n = self.source.peek();
 
                 match (t, n) {
-                    ('/',Some('=')) => { self.source.next(); Token::DivideEquals},
-                    ('*',Some('=')) => { self.source.next(); Token::MultiplyEquals},
-                    ('-',Some('=')) => { self.source.next(); Token::MinusEquals},
-                    ('+',Some('=')) => { self.source.next(); Token::PlusEquals},
-                    ('<',Some('<')) => { self.source.next(); Token::LeftBitShift},
-                    ('>',Some('>')) => { self.source.next(); Token::RightBitShift},
-                    ('=',Some('=')) => { self.source.next(); Token::Equality},
-                    ('!',Some('=')) => { self.source.next(); Token::NotEquality},
-                    ('=',_) => Token::Equals,
-                    ('*',_) => Token::Star,
-                    ('/',_) => Token::Divide,
-                    ('-',_) => Token::Minus,
-                    ('+',_) => Token::Plus,
-                    ('<',_) => Token::LessThan,
-                    ('>',_) => Token::GreaterThan,
-                    ('!',_) => Token::Not,
-                    _=> unreachable!()
+                    ('/', Some('=')) => {
+                        self.source.next();
+                        Token::DivideEquals
+                    }
+                    ('*', Some('=')) => {
+                        self.source.next();
+                        Token::MultiplyEquals
+                    }
+                    ('-', Some('=')) => {
+                        self.source.next();
+                        Token::MinusEquals
+                    }
+                    ('+', Some('=')) => {
+                        self.source.next();
+                        Token::PlusEquals
+                    }
+                    ('<', Some('<')) => {
+                        self.source.next();
+                        Token::LeftBitShift
+                    }
+                    ('>', Some('>')) => {
+                        self.source.next();
+                        Token::RightBitShift
+                    }
+                    ('=', Some('=')) => {
+                        self.source.next();
+                        Token::Equality
+                    }
+                    ('!', Some('=')) => {
+                        self.source.next();
+                        Token::NotEquality
+                    }
+                    ('=', _) => Token::Equals,
+                    ('*', _) => Token::Star,
+                    ('/', _) => Token::Divide,
+                    ('-', _) => Token::Minus,
+                    ('+', _) => Token::Plus,
+                    ('<', _) => Token::LessThan,
+                    ('>', _) => Token::GreaterThan,
+                    ('!', _) => Token::Not,
+                    _ => unreachable!(),
                 }
-            },
+            }
             '.' => {
                 let token = self.read_token(char, |c| c == '.');
                 if token == "..." {

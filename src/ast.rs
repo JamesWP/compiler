@@ -111,7 +111,7 @@ pub enum AssignOp {
     Sum,
     Difference,
     Product,
-    Quotient
+    Quotient,
 }
 
 #[derive(Debug, Clone, PartialEq)]

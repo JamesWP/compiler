@@ -46,8 +46,12 @@ fn main() -> std::io::Result<()> {
     let file = fileiter::FileIter::from(std::fs::File::open(filename.clone())?);
     let lexer = lexer::Lexer::new(Box::new(file), &filename);
 
-    let parser_input:parser::ParserInput = lexer.map(|(_l, t)| t).collect::<Vec<_>>().into();
-    let parser_input = if print_lex { parser_input.enable_debug() } else { parser_input };
+    let parser_input: parser::ParserInput = lexer.map(|(_l, t)| t).collect::<Vec<_>>().into();
+    let parser_input = if print_lex {
+        parser_input.enable_debug()
+    } else {
+        parser_input
+    };
     let translation_unit = parser::ParserState::new(parser_input).parse_translation_unit();
 
     if translation_unit.is_err() {
