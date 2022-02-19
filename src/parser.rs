@@ -1,4 +1,4 @@
-use std::{ops::Deref, rc::Rc};
+use std::{ops::Deref, rc::Rc, cell::RefCell};
 
 use crate::{
     ast::{self, Token, TypeQualifier},
@@ -133,7 +133,7 @@ impl ParserState {
         } else if is_type_decl(self.input.peek()) {
             let base_type = self.parse_declaration_specifiers()?;
             let (name, decl_type) = self.parse_declarator(base_type)?;
-            let location = self.scope.define(&name, &decl_type);
+            let location = self.scope.define(&name, &decl_type, false);
             if self.input.peek() == Some(&ast::Token::Semicolon) {
                 self.input.pop();
                 Ok(ast::Statement::DeclarationStatement(
@@ -144,7 +144,9 @@ impl ParserState {
                 let expression = self.parse_expression()?;
                 self.input.expect(&ast::Token::Semicolon)?;
                 Ok(ast::Statement::DeclarationStatement(
-                    ast::DeclarationStatement::new_with_expression(decl_type, name, expression, location),
+                    ast::DeclarationStatement::new_with_expression(
+                        decl_type, name, expression, location,
+                    ),
                 ))
             }
         } else if self.input.peek() == Some(&ast::Token::Paren('{')) {
@@ -330,7 +332,10 @@ impl ParserState {
                 let ident_type = self.scope.find(&value);
                 self.input.pop();
                 if let Some((type_decl, location)) = ident_type {
-                    (ast::Value::Identifier(value, Rc::clone(location)), type_decl.clone())
+                    (
+                        ast::Value::Identifier(value, Rc::clone(location)),
+                        type_decl.clone(),
+                    )
                 } else {
                     unimplemented!("variable references undeclared identifier {}", value);
                 }
@@ -388,13 +393,15 @@ impl ParserState {
                 &name,
                 &return_type
                     .clone()
-                    .as_function_taking(parameters.clone(), is_definition),
+                    .as_function_taking(parameters.clone(), is_definition), true,
             );
             if is_definition {
                 self.scope.begin_function_scope()?;
-                for (arg_name, arg_type) in parameters.iter() {
-                    self.scope.define(arg_name, arg_type);
-                }
+                // Construct a new parameter list from the old one, using the locations defined in the scope
+                let parameters: Vec<_> = parameters.iter().map(|param| {
+                    let location = self.scope.define(&param.name, &param.decl_type, false);
+                    ast::Parameter{name: param.name.clone(), decl_type: param.decl_type.clone(), location}
+                }).collect();
                 let compound_statement = self.parse_compound_statement()?;
                 self.scope.end_function_scope()?;
                 Ok((
@@ -520,8 +527,8 @@ impl ParserState {
             }
             let base_type = self.parse_declaration_specifiers()?;
             let (name, decl_type) = self.parse_declarator(base_type)?;
-
-            param_list.push((name, decl_type));
+            let location = Rc::new(RefCell::new(None));
+            param_list.push(ast::Parameter {name, decl_type, location});
 
             if self.input.peek() == Some(&ast::Token::Comma) {
                 self.input.pop().unwrap();

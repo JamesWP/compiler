@@ -134,65 +134,56 @@ impl CompilationState {
             assemble!(self, "movq", reg::RSP, reg::RBP);
 
             // Calculate layout of stack frame
-            self.function_stack_frame = Some(compute_stack_layout_for_function(parameter_list));
-
+            let mut layout = platform::StackLayout::default();
             let mut platform_abi = platform::ParameterPlacement::default();
 
             // Move all parameters to stack
-            for (stack_location, (_, decl_type)) in self
-                .function_stack_frame
-                .as_ref()
-                .unwrap()
-                .iter()
-                .zip(parameter_list.iter())
-            {
+            for param in parameter_list.iter() {
+                let size_in_bytes = param.decl_type.size();
+                let stack_location = layout.allocate(name, &param.decl_type, size_in_bytes);
+
                 // calculate which register this parameter comes in
-                let param_location = platform_abi.place(decl_type);
+                let param_location = platform_abi.place(&param.decl_type);
+
+                self.output_comment(format!("Assigning {} to {:?}", param.name, stack_location))?;
 
                 // TODO: handle parameters which don't come in registers
                 let param_reg = param_location.reg.unwrap();
+                match param.decl_type.size() {
+                    4 => assemble!(self, "movl", param_reg, stack_location),
+                    8 => assemble!(self, "mov", param_reg, stack_location),
+                    _ => unimplemented!("size not implemented"),
+                }
 
-                let op = match stack_location.size() {
-                    1 => "movb",
-                    4 => "movl",
-                    8 => "movq",
-                    _ => unimplemented!(),
-                };
-
-                assemble!(self, op, param_reg, stack_location.stack_allocation);
+                *param.location.borrow_mut() = Some(stack_location.clone());
             }
 
             // Allocate space for all local variables
-            for ast::DeclarationStatement{ name, decl_type, location, ..} in definition.declarations() {
+            for ast::DeclarationStatement {
+                name,
+                decl_type,
+                location,
+                ..
+            } in definition.declarations()
+            {
                 let size = decl_type.size();
-                let allocated_location = self.function_stack_frame
-                    .as_mut()
-                    .unwrap()
-                    .allocate(&name, &decl_type, size);
-                *location.borrow_mut() = Some(allocated_location);
+                let allocated_location = layout.allocate(&name, &decl_type, size);
+                *location.borrow_mut() = Some(allocated_location.clone());
+                self.output_comment(format!("Assigned {} to {:?}", name, allocated_location))?;
             }
 
             // Fix stack pointer
-            let stack_size = self.function_stack_frame.as_ref().unwrap().stack_size;
+            let stack_size = layout.stack_size;
             if stack_size != 0 {
                 assemble!(self, "subq", DL::new(stack_size as i32), reg::RSP);
             }
 
+            self.function_stack_frame = Some(layout);
             for statement in statement.iter() {
                 self.compile_statement(statement)?;
             }
 
-            let stack_comments: Vec<_> = self
-                .function_stack_frame
-                .as_ref()
-                .unwrap()
-                .iter()
-                .map(|x| format!("{:10} in {:?}", format!("{}", x.stack_allocation), x.name))
-                .collect();
-
-            for x in stack_comments {
-                self.output_comment(x)?;
-            }
+            self.function_stack_frame = None;
         }
 
         Ok(())
@@ -276,9 +267,12 @@ impl CompilationState {
                         Ok(())
                     }
                     _ => {
-                        let location = location.borrow().as_ref().unwrap().clone();
-                        assemble!(self, "lea", location, reg::RAX);
-                        Ok(())
+                        if let Some(location) = location.borrow().clone() {
+                            assemble!(self, "lea", location, reg::RAX);
+                            Ok(())
+                        } else {
+                            unimplemented!("Location of {} is undefined", ident)
+                        }
                     }
                 },
             },
@@ -549,15 +543,4 @@ impl CompilationState {
         }
         Ok(())
     }
-}
-
-fn compute_stack_layout_for_function(parameter_list: &ast::ParameterList) -> platform::StackLayout {
-    let mut layout = platform::StackLayout::default();
-
-    for (name, decl_type) in parameter_list.iter() {
-        let size_in_bytes = decl_type.size();
-        layout.allocate(name, decl_type, size_in_bytes);
-    }
-
-    layout
 }

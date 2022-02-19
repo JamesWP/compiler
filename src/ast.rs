@@ -1,4 +1,6 @@
-use crate::{scope::SharedOptionStackLocation};
+use std::rc::Rc;
+
+use crate::scope::SharedOptionStackLocation;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ResWord {
@@ -54,8 +56,15 @@ pub struct FunctionDefinition {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct Parameter {
+    pub name: String,
+    pub decl_type: TypeDefinition,
+    pub location: SharedOptionStackLocation,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct ParameterList {
-    parameters: Vec<(String, TypeDefinition)>,
+    parameters: Vec<Parameter>,
     pub var_args: bool,
 }
 
@@ -156,8 +165,8 @@ pub enum LiteralValue {
     StringLiteral(String),
 }
 
-impl From<Vec<(String, TypeDefinition)>> for ParameterList {
-    fn from(parameters: Vec<(String, TypeDefinition)>) -> ParameterList {
+impl From<Vec<Parameter>> for ParameterList {
+    fn from(parameters: Vec<Parameter>) -> ParameterList {
         ParameterList {
             parameters,
             var_args: false,
@@ -165,20 +174,8 @@ impl From<Vec<(String, TypeDefinition)>> for ParameterList {
     }
 }
 
-impl From<Vec<Expression>> for ParameterList {
-    fn from(parameters: Vec<Expression>) -> ParameterList {
-        ParameterList {
-            parameters: parameters
-                .iter()
-                .map(|expr| (String::default(), expr.expr_type.clone()))
-                .collect(),
-            var_args: false,
-        }
-    }
-}
-
-impl Into<Vec<(String, TypeDefinition)>> for ParameterList {
-    fn into(self) -> Vec<(String, TypeDefinition)> {
+impl Into<Vec<Parameter>> for ParameterList {
+    fn into(self) -> Vec<Parameter> {
         self.parameters
     }
 }
@@ -254,7 +251,7 @@ impl Statement {
 }
 
 impl ParameterList {
-    pub fn iter(&self) -> std::slice::Iter<(String, TypeDefinition)> {
+    pub fn iter(&self) -> std::slice::Iter<Parameter> {
         self.parameters.iter()
     }
 }
@@ -330,12 +327,16 @@ impl FunctionDefinition {
 }
 
 impl DeclarationStatement {
-    pub fn new(decl_type: TypeDefinition, name: String, location: SharedOptionStackLocation) -> DeclarationStatement {
+    pub fn new(
+        decl_type: TypeDefinition,
+        name: String,
+        location: SharedOptionStackLocation,
+    ) -> DeclarationStatement {
         DeclarationStatement {
             decl_type,
             name,
             expression: None,
-            location
+            location,
         }
     }
 
