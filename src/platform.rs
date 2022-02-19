@@ -2,7 +2,7 @@ use crate::ast;
 use std::collections::HashMap;
 use std::fmt::Display;
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 #[allow(dead_code)]
 pub enum X86_64Reg {
     AL,   // register al lower 8 bits of a register
@@ -40,7 +40,7 @@ pub enum X86_64Reg {
     R15D, // lower hald of R15
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct StackRelativeLocation {
     // offset from this register (RBP)
     reg: X86_64Reg,

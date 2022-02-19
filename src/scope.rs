@@ -1,59 +1,39 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, rc::Rc, cell::RefCell};
 
-use crate::ast::TypeDefinition;
+use crate::{ast::TypeDefinition, platform::StackRelativeLocation};
+
+pub type SharedOptionStackLocation = Rc<RefCell<Option<StackRelativeLocation>>>;
+pub type SymbolTable = HashMap<String, (TypeDefinition, SharedOptionStackLocation)>;
 #[derive(Default)]
 pub struct Scope {
-    file: HashMap<String, TypeDefinition>,
-    block: Vec<HashMap<String, TypeDefinition>>,
+    file: SymbolTable,
+    block: Vec<SymbolTable>,
 }
 
 pub type ScopeResult<T> = std::result::Result<T, String>;
 
-fn define(map: &mut HashMap<String, TypeDefinition>, name: &str, definition: &TypeDefinition) {
+fn define(map: &mut SymbolTable, name: &str, definition: &TypeDefinition) -> SharedOptionStackLocation {
     let name = name.to_owned();
-    let old_value = map.insert(name.clone(), definition.clone());
+    let location = Rc::new(RefCell::new(None));
+    let old_value = map.insert(name.clone(), (definition.clone(), Rc::clone(&location)));
 
-    if let Some(TypeDefinition::FUNCTION(return_type, arguments, is_local)) = &old_value {
-        if let TypeDefinition::FUNCTION(return_type_new, arguments_new, is_local_new) = definition {
-            if return_type != return_type_new || arguments != arguments_new {
-                unimplemented!(
-                    "redefinition of {} from {:?} to {:?}",
-                    name,
-                    definition,
-                    old_value
-                );
-            }
-
-            // Allow redeclaration
-            let is_local = is_local | is_local_new;
-            match map.get_mut(&name).unwrap() {
-                TypeDefinition::FUNCTION(_, _, is_local_mut) => {
-                    *is_local_mut = is_local;
-                }
-                _ => {}
-            }
-
-            return;
-        }
+    if let Some(_old_definition) = &old_value {
+        unimplemented!(
+            "redefinition of {} from {:?} to {:?}",
+            name,
+            definition,
+            old_value
+        );
     }
 
-    if let Some(old_definition) = &old_value {
-        if definition != old_definition {
-            unimplemented!(
-                "redefinition of {} from {:?} to {:?}",
-                name,
-                definition,
-                old_value
-            );
-        }
-    }
+    location
 }
 
-fn push(stack: &mut Vec<HashMap<String, TypeDefinition>>) {
+fn push(stack: &mut Vec<SymbolTable>) {
     stack.push(HashMap::default());
 }
 
-fn pop(stack: &mut Vec<HashMap<String, TypeDefinition>>) {
+fn pop(stack: &mut Vec<SymbolTable>) {
     stack.pop();
 }
 
@@ -102,15 +82,15 @@ impl Scope {
         Ok(())
     }
 
-    pub fn define(&mut self, name: &str, definition: &TypeDefinition) {
+    pub fn define(&mut self, name: &str, definition: &TypeDefinition) -> SharedOptionStackLocation {
         if let Some(last) = self.block.last_mut() {
-            define(last, name, definition);
+            define(last, name, definition)
         } else {
-            define(&mut self.file, name, definition);
+            define(&mut self.file, name, definition)
         }
     }
 
-    pub fn find(&self, name: &str) -> Option<&TypeDefinition> {
+    pub fn find(&self, name: &str) -> Option<&(TypeDefinition, SharedOptionStackLocation)> {
         let name = name.to_owned();
         for scope in self.block.iter().rev() {
             if let Some(definition) = scope.get(&name) {

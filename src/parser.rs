@@ -1,3 +1,5 @@
+use std::{ops::Deref, rc::Rc};
+
 use crate::{
     ast::{self, Token, TypeQualifier},
     scope::Scope,
@@ -131,18 +133,18 @@ impl ParserState {
         } else if is_type_decl(self.input.peek()) {
             let base_type = self.parse_declaration_specifiers()?;
             let (name, decl_type) = self.parse_declarator(base_type)?;
-            self.scope.define(&name, &decl_type);
+            let location = self.scope.define(&name, &decl_type);
             if self.input.peek() == Some(&ast::Token::Semicolon) {
                 self.input.pop();
                 Ok(ast::Statement::DeclarationStatement(
-                    ast::DeclarationStatement::new(decl_type, name),
+                    ast::DeclarationStatement::new(decl_type, name, location),
                 ))
             } else {
                 self.input.expect(&ast::Token::Equals)?;
                 let expression = self.parse_expression()?;
                 self.input.expect(&ast::Token::Semicolon)?;
                 Ok(ast::Statement::DeclarationStatement(
-                    ast::DeclarationStatement::new_with_expression(decl_type, name, expression),
+                    ast::DeclarationStatement::new_with_expression(decl_type, name, expression, location),
                 ))
             }
         } else if self.input.peek() == Some(&ast::Token::Paren('{')) {
@@ -327,8 +329,8 @@ impl ParserState {
                 let value = id.clone();
                 let ident_type = self.scope.find(&value);
                 self.input.pop();
-                if let Some(type_decl) = ident_type {
-                    (ast::Value::Identifier(value), type_decl.clone())
+                if let Some((type_decl, location)) = ident_type {
+                    (ast::Value::Identifier(value, Rc::clone(location)), type_decl.clone())
                 } else {
                     unimplemented!("variable references undeclared identifier {}", value);
                 }

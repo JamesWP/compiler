@@ -8,6 +8,7 @@ use crate::platform::StackRelativeLocation;
 use crate::platform::X86_64Reg as reg;
 use std::fmt::Display;
 use std::fmt::Write;
+use std::rc::Rc;
 
 struct CompilationState {
     output: String,
@@ -162,13 +163,13 @@ impl CompilationState {
             }
 
             // Allocate space for all local variables
-            for declaration in definition.declarations() {
-                let (name, type_def) = declaration;
-                let size = type_def.size();
-                self.function_stack_frame
+            for ast::DeclarationStatement{ name, decl_type, location, ..} in definition.declarations() {
+                let size = decl_type.size();
+                let allocated_location = self.function_stack_frame
                     .as_mut()
                     .unwrap()
-                    .allocate(&name, &type_def, size);
+                    .allocate(&name, &decl_type, size);
+                *location.borrow_mut() = Some(allocated_location);
             }
 
             // Fix stack pointer
@@ -265,7 +266,7 @@ impl CompilationState {
                         Ok(())
                     }
                 },
-                ast::Value::Identifier(ident) => match expression.expr_type {
+                ast::Value::Identifier(ident, location) => match expression.expr_type {
                     ast::TypeDefinition::FUNCTION(_, _, true) => {
                         assemble!(self, "lea", format!("{}(%rip)", ident), reg::RAX);
                         Ok(())
@@ -275,11 +276,7 @@ impl CompilationState {
                         Ok(())
                     }
                     _ => {
-                        let location = self
-                            .function_stack_frame
-                            .as_ref()
-                            .unwrap()
-                            .get_location(&ident)?;
+                        let location = location.borrow().as_ref().unwrap().clone();
                         assemble!(self, "lea", location, reg::RAX);
                         Ok(())
                     }
@@ -384,7 +381,7 @@ impl CompilationState {
                 if let Some(e) = &declaration.expression {
                     // Store address is pushed onto the stack
                     self.compile_address(&ast::Expression::new_value(
-                        ast::Value::Identifier(name.to_string()),
+                        ast::Value::Identifier(name.to_string(), Rc::clone(&declaration.location)),
                         declaration.decl_type.to_owned(),
                     ))?;
                     self.push(); // This is consumed by compile_store
@@ -506,7 +503,7 @@ impl CompilationState {
                         self.compile_address(expression)?;
                     }
                 },
-                ast::Value::Identifier(_) => {
+                ast::Value::Identifier(_, _) => {
                     self.compile_address(expression)?;
                     self.compile_load(&expression.expr_type)?;
                 }

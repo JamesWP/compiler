@@ -1,3 +1,5 @@
+use crate::{scope::SharedOptionStackLocation};
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum ResWord {
     Return,
@@ -85,6 +87,7 @@ pub struct DeclarationStatement {
     pub name: String,
     pub decl_type: TypeDefinition,
     pub expression: Option<Expression>,
+    pub location: SharedOptionStackLocation,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -144,7 +147,7 @@ pub struct Expression {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Literal(LiteralValue),
-    Identifier(String),
+    Identifier(String, SharedOptionStackLocation),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -307,15 +310,13 @@ impl FunctionDefinition {
         }
     }
 
-    /// return just the names of the declarations in this function.
-    pub fn declarations(&self) -> Vec<(String, TypeDefinition)> {
-        let mut names = vec![];
+    /// return declarations in this function.
+    pub fn declarations(&self) -> Vec<DeclarationStatement> {
+        let mut declarations = vec![];
 
         let mut add_definition = |statement: &Statement| match statement {
-            Statement::DeclarationStatement(DeclarationStatement {
-                name, decl_type, ..
-            }) => {
-                names.push((name.clone(), decl_type.clone()));
+            Statement::DeclarationStatement(d) => {
+                declarations.push(d.clone());
             }
             _ => {}
         };
@@ -324,16 +325,17 @@ impl FunctionDefinition {
             statement.visit_statements(&mut add_definition);
         }
 
-        names
+        declarations
     }
 }
 
 impl DeclarationStatement {
-    pub fn new(decl_type: TypeDefinition, name: String) -> DeclarationStatement {
+    pub fn new(decl_type: TypeDefinition, name: String, location: SharedOptionStackLocation) -> DeclarationStatement {
         DeclarationStatement {
             decl_type,
             name,
             expression: None,
+            location
         }
     }
 
@@ -341,11 +343,13 @@ impl DeclarationStatement {
         decl_type: TypeDefinition,
         name: String,
         expression: Expression,
+        location: SharedOptionStackLocation,
     ) -> DeclarationStatement {
         DeclarationStatement {
             decl_type,
             name,
             expression: Some(expression),
+            location,
         }
     }
 }
