@@ -284,7 +284,27 @@ impl ParserState {
     }
 
     fn parse_unary_expression(&mut self) -> ParseResult<ast::Expression> {
-        self.parse_postfix_expression()
+        // self.parse_postfix_expression()
+        if let Some(token) = self.input.peek() {
+            let op = match token {
+                Token::Minus => ast::UnaryOp::Negate,
+                Token::Plus => todo!(),
+                Token::Star => todo!(),
+                Token::Not => todo!(),
+                _ => { return self.parse_postfix_expression(); }
+            };
+
+            self.input.pop();
+            let cast_expr = self.parse_cast_expression()?;
+            Ok(ast::Expression::new_unaryop(op, Box::new(cast_expr)))
+        } else {
+            self.parse_postfix_expression()
+        }
+    }
+
+    fn parse_cast_expression(&mut self) -> ParseResult<ast::Expression> {
+        //TODO: add cast expression
+        self.parse_unary_expression()
     }
 
     fn parse_postfix_expression(&mut self) -> ParseResult<ast::Expression> {

@@ -142,8 +142,14 @@ pub enum BinOp {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum UnaryOp {
+    Negate,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum ExpressionNode {
     Binary(BinOp, Box<Expression>, Box<Expression>),
+    Unary(UnaryOp, Box<Expression>),
     Value(Value),
     Call(Box<Expression>, Vec<Expression>),
 }
@@ -400,6 +406,13 @@ impl Expression {
         Expression {
             expr_type: result_type,
             node: ExpressionNode::Binary(op, lhs, rhs),
+        }
+    }
+    pub fn new_unaryop(op: UnaryOp, lhs: Box<Expression>) -> Expression {
+        let result_type = lhs.expr_type.clone();
+        Expression {
+            expr_type: result_type,
+            node: ExpressionNode::Unary(op, lhs),
         }
     }
     pub fn new_call(lhs: Box<Expression>, arguments: Vec<Expression>) -> Expression {

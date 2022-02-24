@@ -248,6 +248,7 @@ impl CompilationState {
     fn compile_address(&mut self, expression: &ast::Expression) -> std::io::Result<()> {
         match &expression.node {
             ast::ExpressionNode::Binary(_, _, _) => todo!(),
+            ast::ExpressionNode::Unary(_, _) => todo!(),
             ast::ExpressionNode::Value(v) => match v {
                 ast::Value::Literal(l) => match l {
                     ast::LiteralValue::Int32(_) => todo!(),
@@ -399,9 +400,11 @@ impl CompilationState {
     }
 
     fn compile_expression(&mut self, expression: &ast::Expression) -> std::io::Result<()> {
-        let _result_64 = reg::RAX;
+        let result_64 = reg::RAX;
         let result_32 = reg::EAX;
         let result_8 = reg::AL;
+        let result = match expression.expr_type.size() { 4=>result_32.clone(), 8=>result_64.clone(), _=> unimplemented!()};
+
         match &expression.node {
             ast::ExpressionNode::Binary(ast::BinOp::Assign(op), lhs, rhs) => {
                 // Put the lhs address on the stack
@@ -488,6 +491,14 @@ impl CompilationState {
 
                 self.pop();
             }
+            ast::ExpressionNode::Unary(op, lhs) => {
+                self.compile_expression(lhs.as_ref())?;
+                match op {
+                    ast::UnaryOp::Negate => {
+                        assemble!(self, "neg", result);
+                    },
+                }
+            },
             ast::ExpressionNode::Value(v) => match v {
                 ast::Value::Literal(l) => match l {
                     ast::LiteralValue::Int32(value) => {
