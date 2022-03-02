@@ -333,7 +333,8 @@ impl CompilationState {
                 let end_label = self.labels.allocate_label();
 
                 // jump to end if $eax == zero
-                assemble!(self, "cmp", DL::new(0), reg::RAX);
+                // TODO: support 8 byte values
+                assemble!(self, "cmp", DL::new(0), reg::EAX);
                 assemble!(self, "jz", end_label);
 
                 // --[if body]
@@ -352,7 +353,8 @@ impl CompilationState {
                 let end_label = self.labels.allocate_label();
 
                 // jump to else if $eax == zero
-                assemble!(self, "cmp", DL::new(0), reg::RAX);
+                // TODO: support 8 byte values
+                assemble!(self, "cmp", DL::new(0), reg::EAX);
                 assemble!(self, "jz", else_label);
 
                 // --[if body]
@@ -471,20 +473,24 @@ impl CompilationState {
                     ast::BinOp::Equals => {
                         assemble!(self, "cmp", StackRelativeLocation::top(), result_32);
                         assemble!(self, "sete", result_8);
+                        assemble!(self, "movzb", result_8, result_32);
                     }
                     ast::BinOp::NotEquals => {
                         assemble!(self, "cmp", StackRelativeLocation::top(), result_32);
                         assemble!(self, "setne", result_8);
+                        assemble!(self, "movzb", result_8, result_32);
                     }
                     ast::BinOp::LessThan => {
                         // signed
                         assemble!(self, "cmp", StackRelativeLocation::top(), result_32);
                         assemble!(self, "setb", result_8);
+                        assemble!(self, "movzb", result_8, result_32);
                     }
                     ast::BinOp::GreaterThan => {
                         // signed
                         assemble!(self, "cmp", StackRelativeLocation::top(), result_32);
                         assemble!(self, "setg", result_8);
+                        assemble!(self, "movzb", result_8, result_32);
                     }
                     _ => todo!("implement binop {:?}", op),
                 }
