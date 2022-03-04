@@ -16,7 +16,7 @@ fn define(
     map: &mut SymbolTable,
     name: &str,
     definition: &TypeDefinition,
-    allow_redefinition: bool
+    allow_redefinition: bool,
 ) -> SharedOptionStackLocation {
     let name = name.to_owned();
     let location = Rc::new(RefCell::new(None));
@@ -26,18 +26,13 @@ fn define(
         match old_definition {
             TypeDefinition::FUNCTION(_, _, _) => {
                 if !allow_redefinition {
-                    unimplemented!(
-                        "redefinition of {} with type to {:?}",
-                        name,
-                        definition
-                    );
+                    unimplemented!("redefinition of {} with type to {:?}", name, definition);
                 }
 
                 // TODO: check redefinitions are equivalent
-            },
+            }
             _ => todo!("maybe allow redefinition of other types"),
         }
-
     }
 
     location
@@ -96,7 +91,12 @@ impl Scope {
         Ok(())
     }
 
-    pub fn define(&mut self, name: &str, definition: &TypeDefinition, allow_redefinition: bool) -> SharedOptionStackLocation {
+    pub fn define(
+        &mut self,
+        name: &str,
+        definition: &TypeDefinition,
+        allow_redefinition: bool,
+    ) -> SharedOptionStackLocation {
         if let Some(last) = self.block.last_mut() {
             define(last, name, definition, allow_redefinition)
         } else {
@@ -128,35 +128,39 @@ fn test_scope() {
     let int_p = TypeDefinition::POINTER(TypeQualifier::default(), Box::new(int.clone()));
 
     let find = |scope: &Scope, name| {
-        scope.find(name).map(|(decl_type, _location)| decl_type).unwrap().clone()
+        scope
+            .find(name)
+            .map(|(decl_type, _location)| decl_type)
+            .unwrap()
+            .clone()
     };
     scope.define("global", &char, false);
-    assert_eq!(find(&scope,"global"), char);
+    assert_eq!(find(&scope, "global"), char);
 
     scope.define("a", &int, false);
-    assert_eq!(find(&scope,"a"), int);
-    assert_eq!(find(&scope,"global"), char);
+    assert_eq!(find(&scope, "a"), int);
+    assert_eq!(find(&scope, "global"), char);
 
     {
         scope.begin_function_scope().unwrap();
         scope.define("a", &char, false);
-        assert_eq!(find(&scope,"a"), char);
-        assert_eq!(find(&scope,"global"), char);
+        assert_eq!(find(&scope, "a"), char);
+        assert_eq!(find(&scope, "global"), char);
 
         {
             scope.begin_scope().unwrap();
             scope.define("a", &int_p, false);
-            assert_eq!(find(&scope,"a"), int_p);
-            assert_eq!(find(&scope,"global"), char);
+            assert_eq!(find(&scope, "a"), int_p);
+            assert_eq!(find(&scope, "global"), char);
             scope.end_scope().unwrap();
         }
 
-        assert_eq!(find(&scope,"a"), char);
-        assert_eq!(find(&scope,"global"), char);
+        assert_eq!(find(&scope, "a"), char);
+        assert_eq!(find(&scope, "global"), char);
 
         scope.end_function_scope().unwrap();
     }
 
-    assert_eq!(find(&scope,"a"), int);
-    assert_eq!(find(&scope,"global"), char);
+    assert_eq!(find(&scope, "a"), int);
+    assert_eq!(find(&scope, "global"), char);
 }

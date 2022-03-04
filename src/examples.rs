@@ -1,5 +1,7 @@
 #[cfg(test)]
-fn go(name: &str, command: &mut std::process::Command) -> bool {
+fn go(name: &str, command: &mut std::process::Command, program_output: &mut String) -> bool {
+    use std::ops::Add;
+
     let args: Vec<_> = command
         .get_args()
         .map(|os| format!("{:?}", os.to_string_lossy().to_string()))
@@ -7,17 +9,19 @@ fn go(name: &str, command: &mut std::process::Command) -> bool {
     let program = command.get_program().to_string_lossy().to_string();
 
     let result = if let Ok(output) = command.output() {
+        let stdout = std::str::from_utf8(&output.stdout)
+            .map(|s| s.to_owned())
+            .unwrap_or(format!("bad utf8 output"));
+
+        let stderr = std::str::from_utf8(&output.stderr)
+            .map(|s| s.to_owned())
+            .unwrap_or(format!("bad utf8 output"));
+
         if output.status.code().unwrap_or(1) == 0 {
+            *program_output = format!("{}{}", stdout, stderr);
             Ok(())
         } else {
-            Err((
-                std::str::from_utf8(&output.stdout)
-                    .map(|s| s.to_owned())
-                    .unwrap_or(format!("bad utf8 output")),
-                std::str::from_utf8(&output.stderr)
-                    .map(|s| s.to_owned())
-                    .unwrap_or(format!("bad utf8 output")),
-            ))
+            Err((stdout, stderr))
         }
     } else {
         Err(("".to_owned(), format!("Unable to start program")))
@@ -45,6 +49,7 @@ fn go(name: &str, command: &mut std::process::Command) -> bool {
 
 #[cfg(test)]
 fn native_compile(source_file: &str, object_file: &str) -> bool {
+    let mut output = String::new();
     go(
         "NATIVE CC",
         std::process::Command::new("gcc")
@@ -52,36 +57,44 @@ fn native_compile(source_file: &str, object_file: &str) -> bool {
             .arg(source_file)
             .arg("-o")
             .arg(object_file),
+        &mut output,
     )
 }
 
 #[cfg(test)]
 fn compile(source_file: &str, object_file: &str) -> bool {
+    let mut output = String::new();
     go(
         "COMPILER",
         std::process::Command::new("target/debug/compiler")
             .arg(source_file)
             .arg("-o")
             .arg(object_file),
+        &mut output,
     )
 }
 
 #[cfg(test)]
 fn link(executable_file: &str, object_files: &[String]) -> bool {
+    let mut output = String::new();
     go(
         "LINK",
         std::process::Command::new("gcc")
             .args(object_files)
             .arg("-o")
             .arg(executable_file),
+        &mut output,
     )
 }
 
 #[cfg(test)]
-fn run(executable_file: &str) -> bool {
+fn run(executable_file: &str, input_arguments: &[String], output_bytes: &mut String) -> bool {
     go(
         "RUN",
-        std::process::Command::new(executable_file).env_clear(),
+        std::process::Command::new(executable_file)
+            .env_clear()
+            .args(input_arguments),
+        output_bytes,
     )
 }
 
@@ -91,11 +104,16 @@ use itertools::Itertools;
 #[cfg(test)]
 use std::fs;
 
+#[cfg(test)]
+use std::io::BufRead;
+
 #[test]
 pub fn test() {
+    let mut build_output = String::new();
     assert!(go(
         "BUILD",
-        std::process::Command::new("cargo").arg("build")
+        std::process::Command::new("cargo").arg("build"),
+        &mut build_output
     ));
 
     let mut entries: Vec<_> = fs::read_dir("examples")
@@ -133,12 +151,27 @@ pub fn test() {
         let output = format!("{}/example_{:02}_ref", output_dir, key);
 
         let group: Vec<_> = group.collect();
+        let mut input_arguments = vec![];
 
         let mut objects = vec![];
         for item in group.iter() {
             if let Some(base) = item.strip_suffix(".c") {
                 let object = format!("{}/{}.o", output_dir, base);
-                if !native_compile(&format!("examples/{}", item), &object) {
+                let source_file = format!("examples/{}", item);
+
+                let content = std::fs::File::open(source_file.clone()).unwrap();
+
+                for line in std::io::BufReader::new(content).lines() {
+                    let line = line.unwrap();
+                    if !line.starts_with("// arg: ") {
+                        continue;
+                    }
+                    let arg = line[8..].to_owned();
+                    println!("Arg: {}", arg);
+                    input_arguments.push(arg);
+                }
+
+                if !native_compile(&source_file, &object) {
                     has_this_failed = true;
                     break;
                 }
@@ -156,7 +189,8 @@ pub fn test() {
             continue;
         }
 
-        if !run(&output) {
+        let mut ref_output_bytes = String::new();
+        if !run(&output, &input_arguments, &mut ref_output_bytes) {
             has_failed = true;
             continue;
         }
@@ -194,10 +228,21 @@ pub fn test() {
             continue;
         }
 
-        if !run(&output) {
+        let mut test_output_bytes = String::new();
+        if !run(&output, &input_arguments, &mut test_output_bytes) {
             has_failed = true;
             continue;
         }
+
+        if ref_output_bytes != test_output_bytes {
+            has_failed = true;
+            println!("Ref:");
+            println!("{}", ref_output_bytes);
+            println!("Test:");
+            println!("{}", test_output_bytes);
+            continue;
+        }
+
         println!();
     }
 

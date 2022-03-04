@@ -2,7 +2,7 @@ use crate::ast;
 use std::collections::HashMap;
 use std::fmt::Display;
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 #[allow(dead_code)]
 pub enum X86_64Reg {
     AL,   // register al lower 8 bits of a register
@@ -212,10 +212,6 @@ impl ParameterInfo {
             stack_allocation,
         }
     }
-
-    pub fn size(&self) -> usize {
-        self.param_type.size()
-    }
 }
 
 impl StackRelativeLocation {
@@ -226,11 +222,16 @@ impl StackRelativeLocation {
             size,
         }
     }
-    pub fn top() -> StackRelativeLocation {
+    pub fn top(size: usize) -> StackRelativeLocation {
+        match size {
+            1 | 4 | 8 => {}
+            _ => todo!(),
+        };
+
         StackRelativeLocation {
             reg: X86_64Reg::RSP,
             offset: 0,
-            size: 0,
+            size,
         }
     }
 }
@@ -252,12 +253,6 @@ impl Display for RegisterIndirectLocation {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         write!(formatter, "({})", self.reg)?;
         Ok(())
-    }
-}
-
-impl StackLayout {
-    pub fn iter<'a>(&'a self) -> std::slice::Iter<'a, ParameterInfo> {
-        self.allocated.iter()
     }
 }
 
@@ -300,16 +295,6 @@ impl StackLayout {
             .insert(name.to_owned(), self.allocated.len() - 1);
 
         allocation
-    }
-
-    pub fn get_location(&self, name: &String) -> std::io::Result<StackRelativeLocation> {
-        match self.lookup_map.get(name) {
-            Some(allocation) => Ok(self.allocated[*allocation].stack_allocation.clone()),
-            None => Err(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                format!("variable {} not defined", name),
-            )),
-        }
     }
 }
 

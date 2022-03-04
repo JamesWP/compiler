@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use crate::scope::SharedOptionStackLocation;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -144,6 +142,7 @@ pub enum BinOp {
 #[derive(Debug, Clone, PartialEq)]
 pub enum UnaryOp {
     Negate,
+    Deref,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -384,32 +383,54 @@ impl Expression {
     pub fn new_binop(op: BinOp, lhs: Box<Expression>, rhs: Box<Expression>) -> Expression {
         let int_result = TypeDefinition::INT(TypeQualifier::from(true));
         let char_result = TypeDefinition::INT(TypeQualifier::from(true));
-        use crate::ast::TypeDefinition::*;
-        let result_type = match (&lhs.expr_type, &rhs.expr_type) {
-            (INT(_), INT(_)) => int_result,
-            (INT(_), CHAR(_)) => int_result,
-            (INT(_), FUNCTION(_, _, _)) => todo!(),
-            (INT(_), POINTER(_, _)) => todo!(),
-            (CHAR(_), INT(_)) => int_result,
-            (CHAR(_), CHAR(_)) => char_result,
-            (CHAR(_), FUNCTION(_, _, _)) => todo!(),
-            (CHAR(_), POINTER(_, _)) => todo!(),
-            (FUNCTION(_, _, _), INT(_)) => todo!(),
-            (FUNCTION(_, _, _), CHAR(_)) => todo!(),
-            (FUNCTION(_, _, _), FUNCTION(_, _, _)) => todo!(),
-            (FUNCTION(_, _, _), POINTER(_, _)) => todo!(),
-            (POINTER(_, _), INT(_)) => todo!(),
-            (POINTER(_, _), CHAR(_)) => todo!(),
-            (POINTER(_, _), FUNCTION(_, _, _)) => todo!(),
-            (POINTER(_, _), POINTER(_, _)) => todo!(),
+        let result_type = match op {
+            BinOp::Difference | BinOp::Product | BinOp::Quotient | BinOp::Sum => {
+                use crate::ast::TypeDefinition::*;
+                match (&lhs.expr_type, &rhs.expr_type) {
+                    (INT(_), INT(_)) => int_result,
+                    (INT(_), CHAR(_)) => int_result,
+                    (INT(_), FUNCTION(_, _, _)) => todo!(),
+                    (INT(_), POINTER(_, _)) => todo!(),
+                    (CHAR(_), INT(_)) => int_result,
+                    (CHAR(_), CHAR(_)) => char_result,
+                    (CHAR(_), FUNCTION(_, _, _)) => todo!(),
+                    (CHAR(_), POINTER(_, _)) => todo!(),
+                    (FUNCTION(_, _, _), INT(_)) => todo!(),
+                    (FUNCTION(_, _, _), CHAR(_)) => todo!(),
+                    (FUNCTION(_, _, _), FUNCTION(_, _, _)) => todo!(),
+                    (FUNCTION(_, _, _), POINTER(_, _)) => todo!(),
+                    (POINTER(_, _), INT(_)) => lhs.expr_type.clone(),
+                    (POINTER(_, _), CHAR(_)) => todo!(),
+                    (POINTER(_, _), FUNCTION(_, _, _)) => todo!(),
+                    (POINTER(_, _), POINTER(_, _)) => todo!(),
+                }
+            }
+            BinOp::Assign(_) => lhs.expr_type.clone(),
+            BinOp::Equals => int_result,
+            BinOp::NotEquals => int_result,
+            BinOp::GreaterThan => int_result,
+            BinOp::LessThan => int_result,
+            BinOp::LeftBitShift => todo!(),
+            BinOp::RightBitShift => todo!(),
         };
+
         Expression {
             expr_type: result_type,
             node: ExpressionNode::Binary(op, lhs, rhs),
         }
     }
     pub fn new_unaryop(op: UnaryOp, lhs: Box<Expression>) -> Expression {
-        let result_type = lhs.expr_type.clone();
+        // TODO: correctly detemine the type of the Deref op
+        let result_type = match op {
+            UnaryOp::Deref => match &lhs.expr_type {
+                TypeDefinition::INT(_) => todo!(),
+                TypeDefinition::CHAR(_) => todo!(),
+                TypeDefinition::FUNCTION(_, _, _) => todo!(),
+                TypeDefinition::POINTER(_, p_type) => p_type.as_ref().clone(),
+            },
+            _ => lhs.expr_type.clone(),
+        };
+
         Expression {
             expr_type: result_type,
             node: ExpressionNode::Unary(op, lhs),

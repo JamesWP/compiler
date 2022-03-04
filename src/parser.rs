@@ -1,4 +1,4 @@
-use std::{ops::Deref, rc::Rc, cell::RefCell};
+use std::{cell::RefCell, rc::Rc, convert::TryInto};
 
 use crate::{
     ast::{self, Token, TypeQualifier},
@@ -291,7 +291,9 @@ impl ParserState {
                 Token::Plus => todo!(),
                 Token::Star => todo!(),
                 Token::Not => todo!(),
-                _ => { return self.parse_postfix_expression(); }
+                _ => {
+                    return self.parse_postfix_expression();
+                }
             };
 
             self.input.pop();
@@ -308,24 +310,54 @@ impl ParserState {
     }
 
     fn parse_postfix_expression(&mut self) -> ParseResult<ast::Expression> {
-        let value = self.parse_primary_expression()?;
-        if self.input.peek() == Some(&ast::Token::Paren('[')) {
-            unimplemented!();
-        }
-        if self.input.peek() != Some(&ast::Token::Paren('(')) {
-            return Ok(value);
-        }
+        let mut value = self.parse_primary_expression()?;
 
-        // this is a function call. e.g. blah(1,2,3+4)
-        let function_expr = value;
-        self.input.pop();
-        let argument_expressions = self.parse_argument_expression_list()?;
-        self.input.expect(&ast::Token::Paren(')'))?;
+        loop {
+            value = match self.input.peek() {
+                Some(&ast::Token::Paren('[')) => {
+                    self.input.pop();
 
-        Ok(ast::Expression::new_call(
-            function_expr.into(),
-            argument_expressions,
-        ))
+                    // this is a postfix "array access"
+                    // a[b] => *(a+b*sizeof(a))
+                    let postfix_expr = self.parse_expression()?;
+
+                    // Scale up the postfix to be a multiple of the size of the pointed value
+
+                    let scale = ast::Value::Literal(ast::LiteralValue::Int32(
+                        value.expr_type.size().try_into().unwrap(),
+                    ));
+
+                    let postfix_expr = ast::Expression::new_binop(
+                        ast::BinOp::Product,
+                        Box::new(postfix_expr),
+                        Box::new(ast::Expression::new_value(
+                            scale,
+                            ast::TypeDefinition::INT(true.into()),
+                        )),
+                    );
+                    self.input.expect(&ast::Token::Paren(']'))?;
+
+                    ast::Expression::new_unaryop(
+                        ast::UnaryOp::Deref,
+                        Box::new(ast::Expression::new_binop(
+                            ast::BinOp::Sum,
+                            Box::new(value),
+                            Box::new(postfix_expr),
+                        )),
+                    )
+                }
+                Some(&ast::Token::Paren('(')) => {
+                    self.input.pop();
+
+                    // this is a function call. e.g. blah(1,2,3+4)
+                    let argument_expressions = self.parse_argument_expression_list()?;
+                    self.input.expect(&ast::Token::Paren(')'))?;
+
+                    ast::Expression::new_call(value.into(), argument_expressions)
+                }
+                _ => return Ok(value),
+            };
+        }
     }
 
     fn parse_primary_expression(&mut self) -> ParseResult<ast::Expression> {
@@ -413,15 +445,23 @@ impl ParserState {
                 &name,
                 &return_type
                     .clone()
-                    .as_function_taking(parameters.clone(), is_definition), true,
+                    .as_function_taking(parameters.clone(), is_definition),
+                true,
             );
             if is_definition {
                 self.scope.begin_function_scope()?;
                 // Construct a new parameter list from the old one, using the locations defined in the scope
-                let parameters: Vec<_> = parameters.iter().map(|param| {
-                    let location = self.scope.define(&param.name, &param.decl_type, false);
-                    ast::Parameter{name: param.name.clone(), decl_type: param.decl_type.clone(), location}
-                }).collect();
+                let parameters: Vec<_> = parameters
+                    .iter()
+                    .map(|param| {
+                        let location = self.scope.define(&param.name, &param.decl_type, false);
+                        ast::Parameter {
+                            name: param.name.clone(),
+                            decl_type: param.decl_type.clone(),
+                            location,
+                        }
+                    })
+                    .collect();
                 let compound_statement = self.parse_compound_statement()?;
                 self.scope.end_function_scope()?;
                 Ok((
@@ -548,7 +588,11 @@ impl ParserState {
             let base_type = self.parse_declaration_specifiers()?;
             let (name, decl_type) = self.parse_declarator(base_type)?;
             let location = Rc::new(RefCell::new(None));
-            param_list.push(ast::Parameter {name, decl_type, location});
+            param_list.push(ast::Parameter {
+                name,
+                decl_type,
+                location,
+            });
 
             if self.input.peek() == Some(&ast::Token::Comma) {
                 self.input.pop().unwrap();

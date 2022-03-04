@@ -283,7 +283,7 @@ impl CompilationState {
 
     fn compile_statement(&mut self, statement: &ast::Statement) -> std::io::Result<()> {
         //self.output_comment(format!("-stmt {:?}", statement));
-        self.output_comment("");
+        self.output_comment("")?;
         let post_amble = |state: &mut CompilationState| {
             let stack_size = state.function_stack_frame.as_ref().unwrap().stack_size;
             if stack_size != 0 {
@@ -405,7 +405,11 @@ impl CompilationState {
         let result_64 = reg::RAX;
         let result_32 = reg::EAX;
         let result_8 = reg::AL;
-        let result = match expression.expr_type.size() { 4=>result_32.clone(), 8=>result_64.clone(), _=> unimplemented!()};
+        let result = match expression.expr_type.size() {
+            4 => result_32,
+            8 => result_64,
+            s => unimplemented!("size not implemented, {}", s),
+        };
 
         match &expression.node {
             ast::ExpressionNode::Binary(ast::BinOp::Assign(op), lhs, rhs) => {
@@ -455,42 +459,54 @@ impl CompilationState {
                 self.compile_expression(rhs.as_ref())?;
 
                 self.push();
+
+                let top_of_stack = StackRelativeLocation::top(rhs.expr_type.size());
                 self.compile_expression(&lhs)?;
 
+                let op_suffix = match expression.expr_type.size() {
+                    1 => "b",
+                    4 => "l",
+                    8 => "q",
+                    _ => todo!(),
+                };
+
+                let op_suffix = |op: &str| format!("{}{}", op, op_suffix);
+
+                // allow 1byte, 4byte, 8byte operations
                 match op {
                     ast::BinOp::Sum => {
-                        assemble!(self, "addl", StackRelativeLocation::top(), result_32);
+                        assemble!(self, op_suffix("add"), top_of_stack, result);
                     }
                     ast::BinOp::Difference => {
-                        assemble!(self, "subl", StackRelativeLocation::top(), result_32);
+                        assemble!(self, op_suffix("sub"), top_of_stack, result);
                     }
                     ast::BinOp::Product => {
-                        assemble!(self, "mull", StackRelativeLocation::top());
+                        assemble!(self, op_suffix("mul"), top_of_stack);
                     }
                     ast::BinOp::Quotient => {
-                        assemble!(self, "divl", StackRelativeLocation::top());
+                        assemble!(self, op_suffix("div"), top_of_stack);
                     }
                     ast::BinOp::Equals => {
-                        assemble!(self, "cmp", StackRelativeLocation::top(), result_32);
+                        assemble!(self, "cmp", top_of_stack, result);
                         assemble!(self, "sete", result_8);
-                        assemble!(self, "movzb", result_8, result_32);
+                        assemble!(self, op_suffix("movzb"), result_8, result);
                     }
                     ast::BinOp::NotEquals => {
-                        assemble!(self, "cmp", StackRelativeLocation::top(), result_32);
+                        assemble!(self, "cmp", top_of_stack, result);
                         assemble!(self, "setne", result_8);
-                        assemble!(self, "movzb", result_8, result_32);
+                        assemble!(self, op_suffix("movzb"), result_8, result);
                     }
                     ast::BinOp::LessThan => {
                         // signed
-                        assemble!(self, "cmp", StackRelativeLocation::top(), result_32);
+                        assemble!(self, "cmp", top_of_stack, result_32);
                         assemble!(self, "setb", result_8);
-                        assemble!(self, "movzb", result_8, result_32);
+                        assemble!(self, op_suffix("movzb"), result_8, result_32);
                     }
                     ast::BinOp::GreaterThan => {
                         // signed
-                        assemble!(self, "cmp", StackRelativeLocation::top(), result_32);
+                        assemble!(self, "cmp", top_of_stack, result_32);
                         assemble!(self, "setg", result_8);
-                        assemble!(self, "movzb", result_8, result_32);
+                        assemble!(self, op_suffix("movzb"), result_8, result_32);
                     }
                     _ => todo!("implement binop {:?}", op),
                 }
@@ -500,11 +516,19 @@ impl CompilationState {
             ast::ExpressionNode::Unary(op, lhs) => {
                 self.compile_expression(lhs.as_ref())?;
                 match op {
+                    ast::UnaryOp::Deref => {
+                        assemble!(
+                            self,
+                            "mov",
+                            RegisterIndirectLocation::new(result_64),
+                            result_64
+                        )
+                    }
                     ast::UnaryOp::Negate => {
                         assemble!(self, "neg", result);
-                    },
+                    }
                 }
-            },
+            }
             ast::ExpressionNode::Value(v) => match v {
                 ast::Value::Literal(l) => match l {
                     ast::LiteralValue::Int32(value) => {
