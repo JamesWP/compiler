@@ -406,6 +406,7 @@ impl CompilationState {
         let result_32 = reg::EAX;
         let result_8 = reg::AL;
         let result = match expression.expr_type.size() {
+            1 => result_8,
             4 => result_32,
             8 => result_64,
             s => unimplemented!("size not implemented, {}", s),

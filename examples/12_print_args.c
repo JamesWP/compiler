@@ -14,6 +14,12 @@ int main(int argc, const char* argv[]){
     if(argv[3] != 0) {
         return 2;
     } 
+
+    const char* arg = argv[2];
+
+    if (arg[2] != 115) {
+        return 3;
+    }
     
     return 0;
 }
