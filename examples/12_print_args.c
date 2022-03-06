@@ -16,8 +16,8 @@ int main(int argc, const char* argv[]){
     } 
 
     const char* arg = argv[2];
-
-    if (arg[2] != 115) {
+    char v = arg[2];
+    if (v != 115) {
         return 3;
     }
     
