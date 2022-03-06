@@ -1,5 +1,4 @@
 use crate::ast;
-use std::collections::HashMap;
 use std::fmt::Display;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -59,14 +58,6 @@ pub struct RegisterIndirectLocation {
 pub struct StackLayout {
     pub stack_size: usize,
     next_free_location: usize,
-    allocated: Vec<ParameterInfo>,
-    lookup_map: HashMap<String, usize>,
-}
-
-pub struct ParameterInfo {
-    pub name: String,
-    pub param_type: ast::TypeDefinition,
-    pub stack_allocation: StackRelativeLocation,
 }
 
 pub struct DecimalLiteral {
@@ -202,20 +193,6 @@ impl ParameterPlacement {
     }
 }
 
-impl ParameterInfo {
-    pub fn new(
-        name: &str,
-        param_type: &ast::TypeDefinition,
-        stack_allocation: StackRelativeLocation,
-    ) -> ParameterInfo {
-        ParameterInfo {
-            name: name.to_owned(),
-            param_type: param_type.clone(),
-            stack_allocation,
-        }
-    }
-}
-
 impl StackRelativeLocation {
     pub fn new(offset: i32, size: usize) -> StackRelativeLocation {
         StackRelativeLocation {
@@ -263,23 +240,31 @@ impl Default for StackLayout {
         StackLayout {
             stack_size: 0,
             next_free_location: 0,
-            allocated: Vec::default(),
-            lookup_map: HashMap::default(),
         }
     }
 }
 
+//  rbp=0x100
+//  |
+//  .---.---.---.---.---.---> more things on stack, lower addresses
+//  0   4   8   2   6   0
+//              1   1   2
+
+
+// the int at rbp-4:
+//   ---.
+//   1234
+//      |< pointer to here
+//   .  .
+// msb  lsb
+
 impl StackLayout {
     pub fn allocate(
         &mut self,
-        name: &str,
-        type_def: &ast::TypeDefinition,
         size_in_bytes: usize,
     ) -> StackRelativeLocation {
         // Make space in the stack
         self.next_free_location += size_in_bytes;
-
-        let location_in_stack = 0 - self.next_free_location as i32;
 
         if (size_in_bytes & (size_in_bytes - 1)) != 0 {
             unimplemented!("cant allocate non multiple of 2 sized space in stack");
@@ -287,14 +272,12 @@ impl StackLayout {
 
         self.next_free_location =
             (self.next_free_location + size_in_bytes - 1) / size_in_bytes * size_in_bytes;
+
         self.stack_size = self.next_free_location;
 
-        let allocation = StackRelativeLocation::new(location_in_stack, size_in_bytes);
-        let param_info = ParameterInfo::new(name, type_def, allocation.clone());
-        self.allocated.push(param_info);
+        let location_in_stack = 0 - self.next_free_location as i32;
 
-        self.lookup_map
-            .insert(name.to_owned(), self.allocated.len() - 1);
+        let allocation = StackRelativeLocation::new(location_in_stack, size_in_bytes);
 
         allocation
     }
@@ -302,5 +285,15 @@ impl StackLayout {
 
 #[test]
 pub fn test_stack_allocate() {
-    let _mut_layout = StackLayout::default();
+    let mut layout = StackLayout::default();
+
+    let a = layout.allocate(1).offset;
+    let b = layout.allocate(1).offset;
+    let c = layout.allocate(1).offset;
+    let int = layout.allocate(4).offset;
+
+    assert_eq!(a, -1);
+    assert_eq!(b, -2);
+    assert_eq!(c, -3);
+    assert_eq!(int, -8);
 }

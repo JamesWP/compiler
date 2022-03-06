@@ -140,7 +140,7 @@ impl CompilationState {
             // Move all parameters to stack
             for param in parameter_list.iter() {
                 let size_in_bytes = param.decl_type.size();
-                let stack_location = layout.allocate(name, &param.decl_type, size_in_bytes);
+                let stack_location = layout.allocate(size_in_bytes);
 
                 // calculate which register this parameter comes in
                 let param_location = platform_abi.place(&param.decl_type);
@@ -167,7 +167,7 @@ impl CompilationState {
             } in definition.declarations()
             {
                 let size = decl_type.size();
-                let allocated_location = layout.allocate(&name, &decl_type, size);
+                let allocated_location = layout.allocate(size);
                 *location.borrow_mut() = Some(allocated_location.clone());
                 self.output_comment(format!("Assigned {} to {:?}", name, allocated_location))?;
             }
