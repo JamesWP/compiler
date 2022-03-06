@@ -43,7 +43,7 @@ int main(int argc, const char* argv[]){
         return 22;
     }
 
-    if (v != 115) {
+    if (v != 's') {
         return 30;
     }
     

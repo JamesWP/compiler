@@ -167,6 +167,19 @@ impl Iterator for Lexer {
                     return None;
                 }
             }
+            '\'' => {
+                let token = self.read_token(char, |c| c != '\'');
+                if self.source.next() != Some('\'') {
+                    unimplemented!("Expected \' while lexing");
+                }
+                let token = &token.as_str()[1..];
+                let char_value = match token.len() {
+                    1 => token.as_bytes()[0] as i64,
+                    _ => todo!("more complex char literal")
+                };
+
+                Token::Value(char_value)
+            }
             '\"' => {
                 let token = self.read_token(char, |c| c != '\"');
                 if self.source.next() != Some('\"') {
