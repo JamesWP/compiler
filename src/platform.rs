@@ -1,5 +1,5 @@
 use crate::ast;
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 #[allow(dead_code)]
@@ -57,7 +57,9 @@ pub struct RegisterIndirectLocation {
 
 pub struct StackLayout {
     pub stack_size: usize,
-    next_free_location: usize,
+    last_allocated_byte: usize,
+    debug_information: Vec<i32>,
+    debug_total_allocations: i32,
 }
 
 pub struct DecimalLiteral {
@@ -239,8 +241,21 @@ impl Default for StackLayout {
     fn default() -> StackLayout {
         StackLayout {
             stack_size: 0,
-            next_free_location: 0,
+            last_allocated_byte: 0,
+            debug_information: Vec::new(),
+            debug_total_allocations: 0,
         }
+    }
+}
+
+impl Debug for StackLayout {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let stack_diagram: String = self.debug_information.iter().map(|num| (num%10).to_string()).collect();
+
+        f.debug_struct("StackLayout")
+            .field("stack_size", &self.stack_size)
+            .field("stack_diagram", &stack_diagram)
+            .finish()
     }
 }
 
@@ -250,7 +265,6 @@ impl Default for StackLayout {
 //  0   4   8   2   6   0
 //              1   1   2
 
-
 // the int at rbp-4:
 //   ---.
 //   1234
@@ -259,27 +273,58 @@ impl Default for StackLayout {
 // msb  lsb
 
 impl StackLayout {
-    pub fn allocate(
-        &mut self,
-        size_in_bytes: usize,
-    ) -> StackRelativeLocation {
-        // Make space in the stack
-        self.next_free_location += size_in_bytes;
-
-        if (size_in_bytes & (size_in_bytes - 1)) != 0 {
+    fn allign_to(value: usize, num_bytes: usize) -> usize {
+        if (num_bytes & (num_bytes - 1)) != 0 {
             unimplemented!("cant allocate non multiple of 2 sized space in stack");
         }
 
-        self.next_free_location =
-            (self.next_free_location + size_in_bytes - 1) / size_in_bytes * size_in_bytes;
+        (value + num_bytes - 1) / num_bytes * num_bytes
+    }
 
-        self.stack_size = self.next_free_location;
+    pub fn allocate(&mut self, size_in_bytes: usize) -> StackRelativeLocation {
+        let last_allocation = self.last_allocated_byte;
 
-        let location_in_stack = 0 - self.next_free_location as i32;
+        // Make space in the stack
+        self.last_allocated_byte = Self::allign_to(self.last_allocated_byte + size_in_bytes, size_in_bytes);
+
+        self.stack_size = self.last_allocated_byte;
+
+        self.debug_total_allocations += 1;
+
+        let location_in_stack = 0 - self.last_allocated_byte as i32;
+
+        // debug bookkeeping, track what each byte in the stack is used for
+        for loc in last_allocation..self.last_allocated_byte {
+            let debug_info = if loc < self.last_allocated_byte - size_in_bytes {
+                0
+            } else {
+                self.debug_total_allocations
+            };
+
+            self.debug_information.push(debug_info);
+        }
 
         let allocation = StackRelativeLocation::new(location_in_stack, size_in_bytes);
 
         allocation
+    }
+
+    pub fn finalize(&mut self) {
+        // the stack pointer must be alligned to an 8 byte boundary before it can be used to push and pop
+        // TODO: (stack pointer + 8) must be alligned to a 16 byte boundary before a function call
+
+        let last_allocation = self.last_allocated_byte;
+        let size_in_bytes = 8;
+
+        // allign stack to 8 byte boundary
+        self.last_allocated_byte = Self::allign_to(self.last_allocated_byte, size_in_bytes);
+
+        self.stack_size = self.last_allocated_byte;
+
+        // debug bookkeeping, track what each byte in the stack is used for
+        for _ in last_allocation..self.last_allocated_byte {
+            self.debug_information.push(0);
+        }
     }
 }
 
@@ -291,9 +336,16 @@ pub fn test_stack_allocate() {
     let b = layout.allocate(1).offset;
     let c = layout.allocate(1).offset;
     let int = layout.allocate(4).offset;
+    let int2 = layout.allocate(4).offset;
+
+    layout.finalize();
+    println!("{:#?}", layout);
 
     assert_eq!(a, -1);
     assert_eq!(b, -2);
     assert_eq!(c, -3);
     assert_eq!(int, -8);
+    assert_eq!(int2, -12);
+
+    assert_eq!(layout.stack_size, 16);
 }

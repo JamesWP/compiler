@@ -172,6 +172,10 @@ impl CompilationState {
                 self.output_comment(format!("Assigned {} to {:?}", name, allocated_location))?;
             }
 
+            layout.finalize();
+
+            self.output_comment(format!("{:?}", &layout))?;
+
             // Fix stack pointer
             let stack_size = layout.stack_size;
             if stack_size != 0 {
