@@ -6,6 +6,7 @@ use std::fmt::Display;
 #[allow(dead_code)]
 pub enum X86_64Reg {
     AL,   // register al lower 8 bits of a register
+    DL,   // register dl lower 8 bits of d register
     RAX,  // register a extended
     RBX,  // register b extended
     RCX,  // register c extended
@@ -128,6 +129,7 @@ impl Display for X86_64Reg {
             "%{}",
             match self {
                 X86_64Reg::AL => "al",
+                X86_64Reg::DL => "dl",
                 X86_64Reg::RAX => "rax",
                 X86_64Reg::RBX => "rbx",
                 X86_64Reg::RCX => "rcx",

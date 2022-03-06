@@ -215,6 +215,12 @@ impl CompilationState {
                 reg::EAX,
                 RegisterIndirectLocation::new(reg::RDI)
             ),
+            1 => assemble!(
+                self,
+                "movb",
+                reg::AL,
+                RegisterIndirectLocation::new(reg::RDI)
+            ),
             s => unimplemented!("size error, {}", s),
         }
         Ok(())
@@ -239,6 +245,15 @@ impl CompilationState {
                     RegisterIndirectLocation::new(reg::RAX),
                     reg::EAX
                 ),
+                1 => {
+                    assemble!(
+                        self,
+                        "movb",
+                        RegisterIndirectLocation::new(reg::RAX),
+                        reg::AL
+                    );
+                    assemble!(self, "movzx", reg::AL, reg::EAX);
+                }
                 s => unimplemented!("size error, {}", s),
             },
         }
@@ -284,24 +299,23 @@ impl CompilationState {
     fn compile_statement(&mut self, statement: &ast::Statement) -> std::io::Result<()> {
         //self.output_comment(format!("-stmt {:?}", statement));
         self.output_comment("")?;
-        let post_amble = |state: &mut CompilationState| {
-            let stack_size = state.function_stack_frame.as_ref().unwrap().stack_size;
-            if stack_size != 0 {
-                assemble!(state, "movq", reg::RBP, reg::RSP);
-            }
-            // TODO: read information about all registers which need popping
-            assemble!(state, "popq", reg::RBP);
-        };
-
         match statement {
-            ast::Statement::JumpStatement(ast::JumpStatement::Return) => {
-                post_amble(self);
-                assemble!(self, "ret");
-            }
-            ast::Statement::JumpStatement(ast::JumpStatement::ReturnWithValue(s)) => {
+            ast::Statement::JumpStatement(js) => {
                 // TODO: read information about all registers which need popping
-                self.compile_expression(s)?;
-                post_amble(self);
+                match js {
+                    ast::JumpStatement::Return => {}
+                    ast::JumpStatement::ReturnWithValue(s) => {
+                        self.compile_expression(s)?;
+                    }
+                };
+
+                let stack_size = self.function_stack_frame.as_ref().unwrap().stack_size;
+                if stack_size != 0 {
+                    assemble!(self, "movq", reg::RBP, reg::RSP);
+                }
+
+                // TODO: read information about all registers which need popping
+                assemble!(self, "popq", reg::RBP);
                 assemble!(self, "ret");
             }
             ast::Statement::WhileStatement(ast::WhileStatement {
@@ -411,6 +425,23 @@ impl CompilationState {
             8 => result_64,
             s => unimplemented!("size not implemented, {}", s),
         };
+        let extra_64 = reg::RDI;
+        let extra_32 = reg::EDI;
+        let extra_8 = reg::DL;
+        let extra = match expression.expr_type.size() {
+            1 => extra_8,
+            4 => extra_32,
+            8 => extra_64,
+            s => unimplemented!("size not implemented, {}", s),
+        };
+        let op_suffix = match expression.expr_type.size() {
+            1 => "b",
+            4 => "l",
+            8 => "q",
+            _ => todo!(),
+        };
+
+        let op_suffix = |op: &str| format!("{}{}", op, op_suffix);
 
         match &expression.node {
             ast::ExpressionNode::Binary(ast::BinOp::Assign(op), lhs, rhs) => {
@@ -422,34 +453,33 @@ impl CompilationState {
                 self.compile_expression(rhs)?;
 
                 if let Some(op) = op {
-                    assemble!(self, "mov", reg::RAX, reg::RDI);
+                    // Store the value into RDI
+                    // TODO: move larger than 8 bytes here
+                    assemble!(self, "mov", result, extra);
 
-                    // Put the lhs value in RAX
+                    // The stack pointer points to the stack, where we pushed the address
                     assemble!(
                         self,
                         "mov",
                         RegisterIndirectLocation::new(reg::RSP),
                         reg::RAX
-                    ); // The stack pointer points to the stack,
-                    assemble!(
-                        self,
-                        "movl",
-                        RegisterIndirectLocation::new(reg::RAX),
-                        reg::EAX
-                    ); // And the value in the stack is a pointer to the value we want
+                    );
+
+                    // Put the lhs value in RAX
+                    self.compile_load(&lhs.expr_type)?;
 
                     match op {
                         ast::AssignOp::Sum => {
-                            assemble!(self, "addl", reg::EDI, reg::EAX);
+                            assemble!(self, op_suffix("add"), extra, result);
                         }
                         ast::AssignOp::Difference => {
-                            assemble!(self, "subl", reg::EDI, reg::EAX);
+                            assemble!(self, op_suffix("sub"), extra, result);
                         }
                         ast::AssignOp::Product => {
-                            assemble!(self, "mull", reg::EDI);
+                            assemble!(self, op_suffix("mul"), extra);
                         }
                         ast::AssignOp::Quotient => {
-                            assemble!(self, "divl", reg::EDI);
+                            assemble!(self, op_suffix("div"), extra);
                         }
                     }
                 }
@@ -463,15 +493,6 @@ impl CompilationState {
 
                 let top_of_stack = StackRelativeLocation::top(rhs.expr_type.size());
                 self.compile_expression(&lhs)?;
-
-                let op_suffix = match expression.expr_type.size() {
-                    1 => "b",
-                    4 => "l",
-                    8 => "q",
-                    _ => todo!(),
-                };
-
-                let op_suffix = |op: &str| format!("{}{}", op, op_suffix);
 
                 // allow 1byte, 4byte, 8byte operations
                 match op {
@@ -488,26 +509,26 @@ impl CompilationState {
                         assemble!(self, op_suffix("div"), top_of_stack);
                     }
                     ast::BinOp::Equals => {
-                        assemble!(self, "cmp", top_of_stack, result);
+                        assemble!(self, op_suffix("cmp"), top_of_stack, result);
                         assemble!(self, "sete", result_8);
                         assemble!(self, op_suffix("movzb"), result_8, result);
                     }
                     ast::BinOp::NotEquals => {
-                        assemble!(self, "cmp", top_of_stack, result);
+                        assemble!(self, op_suffix("cmp"), top_of_stack, result);
                         assemble!(self, "setne", result_8);
                         assemble!(self, op_suffix("movzb"), result_8, result);
                     }
                     ast::BinOp::LessThan => {
                         // signed
-                        assemble!(self, "cmp", top_of_stack, result_32);
+                        assemble!(self, op_suffix("cmp"), top_of_stack, result);
                         assemble!(self, "setb", result_8);
-                        assemble!(self, op_suffix("movzb"), result_8, result_32);
+                        assemble!(self, op_suffix("movzb"), result_8, result);
                     }
                     ast::BinOp::GreaterThan => {
                         // signed
-                        assemble!(self, "cmp", top_of_stack, result_32);
+                        assemble!(self, op_suffix("cmp"), top_of_stack, result);
                         assemble!(self, "setg", result_8);
-                        assemble!(self, op_suffix("movzb"), result_8, result_32);
+                        assemble!(self, op_suffix("movzb"), result_8, result);
                     }
                     _ => todo!("implement binop {:?}", op),
                 }
@@ -526,7 +547,7 @@ impl CompilationState {
                         )
                     }
                     ast::UnaryOp::Negate => {
-                        assemble!(self, "neg", result);
+                        assemble!(self, op_suffix("neg"), result);
                     }
                 }
             }

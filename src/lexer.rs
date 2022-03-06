@@ -257,6 +257,8 @@ impl Iterator for Lexer {
                     Token::Reserved(ResWord::Continue)
                 } else if token == "break" {
                     Token::Reserved(ResWord::Break)
+                } else if token == "sizeof" {
+                    Token::Reserved(ResWord::Sizeof)
                 } else {
                     Token::Identifier(token)
                 }
