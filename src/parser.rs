@@ -327,10 +327,10 @@ impl ParserState {
                     let scale = match &value.expr_type {
                         ast::TypeDefinition::INT(_) => todo!("How can you index into an int?"),
                         ast::TypeDefinition::CHAR(_) => todo!("How can you index into a char?"),
-                        ast::TypeDefinition::FUNCTION(_, _, _) => todo!("How can you index into a function?"),
-                        ast::TypeDefinition::POINTER(_, p_type) => {
-                            p_type.size()
-                        },
+                        ast::TypeDefinition::FUNCTION(_, _, _) => {
+                            todo!("How can you index into a function?")
+                        }
+                        ast::TypeDefinition::POINTER(_, p_type) => p_type.size(),
                     };
 
                     // If the size of the pointed is larger than one, we need to multiply
@@ -341,12 +341,14 @@ impl ParserState {
                             ast::BinOp::Product,
                             Box::new(postfix_expr),
                             Box::new(ast::Expression::new_value(
-                                ast::Value::Literal(ast::LiteralValue::Int32( scale.try_into().unwrap())),
+                                ast::Value::Literal(ast::LiteralValue::Int32(
+                                    scale.try_into().unwrap(),
+                                )),
                                 ast::TypeDefinition::INT(true.into()),
                             )),
-                        )
+                        ),
                     };
-                    
+
                     self.input.expect(&ast::Token::Paren(']'))?;
 
                     ast::Expression::new_unaryop(
@@ -412,7 +414,7 @@ impl ParserState {
             }
             Some(ast::Token::Reserved(ast::ResWord::Sizeof)) => {
                 self.input.pop();
-                
+
                 //TODO: allow "sizeof a"?
                 self.input.expect(&ast::Token::Paren('('))?;
                 let expr = self.parse_expression()?;
