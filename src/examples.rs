@@ -1,7 +1,5 @@
 #[cfg(test)]
 fn go(name: &str, command: &mut std::process::Command, program_output: &mut String) -> bool {
-    use std::ops::Add;
-
     let args: Vec<_> = command
         .get_args()
         .map(|os| format!("{:?}", os.to_string_lossy().to_string()))

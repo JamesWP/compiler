@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc, convert::TryInto};
+use std::{cell::RefCell, convert::TryInto, rc::Rc};
 
 use crate::{
     ast::{self, Token, TypeQualifier},
@@ -71,7 +71,7 @@ fn is_type_decl(token: Option<&ast::Token>) -> bool {
             Token::Reserved(r) => match r {
                 Return => false,
                 Int | Char | Const => true,
-                If | Else | Do | For | While | Continue | Break => false,
+                If | Else | Do | For | While | Continue | Break | Sizeof => false,
             },
             _ => false,
         },
@@ -323,18 +323,30 @@ impl ParserState {
 
                     // Scale up the postfix to be a multiple of the size of the pointed value
 
-                    let scale = ast::Value::Literal(ast::LiteralValue::Int32(
-                        value.expr_type.size().try_into().unwrap(),
-                    ));
+                    // Assume the lhs is a pointer to some type
+                    let scale = match &value.expr_type {
+                        ast::TypeDefinition::INT(_) => todo!("How can you index into an int?"),
+                        ast::TypeDefinition::CHAR(_) => todo!("How can you index into a char?"),
+                        ast::TypeDefinition::FUNCTION(_, _, _) => todo!("How can you index into a function?"),
+                        ast::TypeDefinition::POINTER(_, p_type) => {
+                            p_type.size()
+                        },
+                    };
 
-                    let postfix_expr = ast::Expression::new_binop(
-                        ast::BinOp::Product,
-                        Box::new(postfix_expr),
-                        Box::new(ast::Expression::new_value(
-                            scale,
-                            ast::TypeDefinition::INT(true.into()),
-                        )),
-                    );
+                    // If the size of the pointed is larger than one, we need to multiply
+                    // e.g. skipping to the next 4 byte int in memory required 1*4 to be added
+                    let postfix_expr = match scale {
+                        1 => postfix_expr,
+                        _ => ast::Expression::new_binop(
+                            ast::BinOp::Product,
+                            Box::new(postfix_expr),
+                            Box::new(ast::Expression::new_value(
+                                ast::Value::Literal(ast::LiteralValue::Int32( scale.try_into().unwrap())),
+                                ast::TypeDefinition::INT(true.into()),
+                            )),
+                        )
+                    };
+                    
                     self.input.expect(&ast::Token::Paren(']'))?;
 
                     ast::Expression::new_unaryop(
@@ -397,6 +409,22 @@ impl ParserState {
                 let expr = self.parse_expression()?;
                 self.input.expect(&ast::Token::Paren(')'))?;
                 return Ok(expr);
+            }
+            Some(ast::Token::Reserved(ast::ResWord::Sizeof)) => {
+                self.input.pop();
+                
+                //TODO: allow "sizeof a"?
+                self.input.expect(&ast::Token::Paren('('))?;
+                let expr = self.parse_expression()?;
+                self.input.expect(&ast::Token::Paren(')'))?;
+
+                // TODO: this should be an unsigned type
+                (
+                    ast::Value::Literal(ast::LiteralValue::Int32(
+                        expr.expr_type.size().try_into().unwrap(),
+                    )),
+                    ast::TypeDefinition::INT(true.into()),
+                )
             }
             _ => unimplemented!(
                 "Unable to parse primary expression. expected token found {:?}",

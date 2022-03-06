@@ -252,13 +252,8 @@ impl CompilationState {
                         RegisterIndirectLocation::new(reg::RAX),
                         reg::AL
                     );
-                    assemble!(
-                        self,
-                        "movzx",
-                        reg::AL,
-                        reg::EAX
-                    );
-                },
+                    assemble!(self, "movzx", reg::AL, reg::EAX);
+                }
                 s => unimplemented!("size error, {}", s),
             },
         }
@@ -308,8 +303,10 @@ impl CompilationState {
             ast::Statement::JumpStatement(js) => {
                 // TODO: read information about all registers which need popping
                 match js {
-                    ast::JumpStatement::Return => {},
-                    ast::JumpStatement::ReturnWithValue(s) => { self.compile_expression(s)?; },
+                    ast::JumpStatement::Return => {}
+                    ast::JumpStatement::ReturnWithValue(s) => {
+                        self.compile_expression(s)?;
+                    }
                 };
 
                 let stack_size = self.function_stack_frame.as_ref().unwrap().stack_size;
@@ -446,7 +443,6 @@ impl CompilationState {
 
         let op_suffix = |op: &str| format!("{}{}", op, op_suffix);
 
-
         match &expression.node {
             ast::ExpressionNode::Binary(ast::BinOp::Assign(op), lhs, rhs) => {
                 // Put the lhs address on the stack
@@ -467,7 +463,7 @@ impl CompilationState {
                         "mov",
                         RegisterIndirectLocation::new(reg::RSP),
                         reg::RAX
-                    ); 
+                    );
 
                     // Put the lhs value in RAX
                     self.compile_load(&lhs.expr_type)?;

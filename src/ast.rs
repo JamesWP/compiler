@@ -13,6 +13,7 @@ pub enum ResWord {
     Do,
     Break,
     Continue,
+    Sizeof,
 }
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {

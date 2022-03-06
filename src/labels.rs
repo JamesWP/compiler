@@ -10,7 +10,7 @@ impl Default for LabelAllocator {
 
 impl LabelAllocator {
     pub fn allocate_label(&mut self) -> String {
-        let label = format!("label_{:<02}", self.next_label);
+        let label = format!(".L{:}", self.next_label);
 
         self.next_label += 1;
 
