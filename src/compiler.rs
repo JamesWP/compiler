@@ -15,6 +15,7 @@ struct CompilationState {
     function_stack_frame: Option<platform::StackLayout>,
     pub intern: intern::Intern,
     pub labels: labels::LabelAllocator,
+    pub debug: bool,
 }
 
 impl Default for CompilationState {
@@ -24,13 +25,20 @@ impl Default for CompilationState {
             function_stack_frame: None,
             intern: intern::Intern::new(),
             labels: labels::LabelAllocator::default(),
+            debug: false,
         }
     }
 }
 
+fn fmt_to_io(fmt_err: std::fmt::Error) -> std::io::Error {
+    std::io::Error::new(std::io::ErrorKind::InvalidInput, fmt_err)
+}
+
 impl CompilationState {
     fn output_comment<T: Display>(&mut self, message: T) -> std::io::Result<()> {
-        writeln!(self.output, "# {}", message).unwrap();
+        for line in format!("{}", message).lines() {
+            writeln!(self.output, "# {}", line).map_err(fmt_to_io)?;
+        }
         Ok(())
     }
     fn output_section<T: Display>(&mut self, section: T) -> std::io::Result<()> {
@@ -81,8 +89,15 @@ macro_rules! assemble {
     }};
 }
 
-pub fn compile(translation_unit: &ast::TranslationUnit) -> std::io::Result<String> {
+pub fn compile(translation_unit: &ast::TranslationUnit, debug: bool) -> std::io::Result<String> {
     let mut state = CompilationState::default();
+
+    state.debug = debug;
+
+    if debug {
+        state.output_comment("Ast Dump")?;
+        state.output_comment(format!("{:#?}", translation_unit))?;
+    }
 
     state.output_comment("Begin output")?;
     state.compile_translation_unit(translation_unit)?;
@@ -264,6 +279,23 @@ impl CompilationState {
         Ok(())
     }
 
+    fn debug_expression(&mut self, message: &str, expression: &ast::Expression) -> std::io::Result<()> {
+        if self.debug {
+            self.output_comment(format!("{}: {:#?}", message, expression))?;
+        } else {
+            self.output_comment(&format!("{}: {:?}", message, expression)[0..40])?;
+        }
+        Ok(())
+    }
+    fn debug_statement(&mut self, statement: &ast::Statement) -> std::io::Result<()> {
+        if self.debug {
+            self.output_comment(format!("{:#?}", statement))?;
+        } else {
+            self.output_comment(&format!("{:?}", statement)[0..40])?;
+        }
+        Ok(())
+    }
+
     fn compile_address(&mut self, expression: &ast::Expression) -> std::io::Result<()> {
         match &expression.node {
             ast::ExpressionNode::Binary(_, _, _) => todo!(),
@@ -301,10 +333,9 @@ impl CompilationState {
     }
 
     fn compile_statement(&mut self, statement: &ast::Statement) -> std::io::Result<()> {
-        //self.output_comment(format!("-stmt {:?}", statement));
-        self.output_comment("")?;
         match statement {
             ast::Statement::JumpStatement(js) => {
+                self.debug_statement(statement)?;
                 // TODO: read information about all registers which need popping
                 match js {
                     ast::JumpStatement::Return => {}
@@ -326,6 +357,7 @@ impl CompilationState {
                 condition_expression,
                 loop_body,
             }) => {
+                self.debug_expression("while", condition_expression)?;
                 let start_label = self.labels.allocate_label();
                 let end_label = self.labels.allocate_label();
                 // start_label:
@@ -347,6 +379,7 @@ impl CompilationState {
                 if_body,
                 else_body: None,
             }) => {
+                self.debug_expression("if", condition_expression)?;
                 self.compile_expression(condition_expression)?;
                 let end_label = self.labels.allocate_label();
 
@@ -366,6 +399,7 @@ impl CompilationState {
                 if_body,
                 else_body: Some(else_body),
             }) => {
+                self.debug_expression("if", condition_expression)?;
                 self.compile_expression(condition_expression)?;
                 let else_label = self.labels.allocate_label();
                 let end_label = self.labels.allocate_label();
@@ -391,6 +425,7 @@ impl CompilationState {
                 self.output_label(end_label)?;
             }
             ast::Statement::DeclarationStatement(declaration) => {
+                self.debug_statement(statement)?;
                 let name = &declaration.name;
 
                 if let Some(e) = &declaration.expression {
@@ -407,6 +442,7 @@ impl CompilationState {
                 }
             }
             ast::Statement::Expression(e) => {
+                self.debug_statement(statement)?;
                 self.compile_expression(e)?;
             }
             ast::Statement::CompoundStatement(statements) => {

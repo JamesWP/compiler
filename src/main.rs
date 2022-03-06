@@ -63,13 +63,7 @@ fn main() -> std::io::Result<()> {
 
     let translation_unit = translation_unit.unwrap();
 
-    if print_ast {
-        println!("Ast Dump");
-
-        println!("{:#?}", translation_unit);
-    }
-
-    let assembly = compiler::compile(&translation_unit)?;
+    let assembly = compiler::compile(&translation_unit, print_ast)?;
 
     std::fs::write(output_filename.clone(), &assembly)?;
 
