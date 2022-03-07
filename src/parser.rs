@@ -166,7 +166,7 @@ impl ParserState {
     }
 
     fn parse_assignment_expression(&mut self) -> ParseResult<ast::Expression> {
-        let mut equality_expression = self.parse_equality_expression()?;
+        let mut conditional_expression = self.parse_conditional_expression()?;
         loop {
             let op = match self.input.peek() {
                 Some(&ast::Token::PlusEquals) => ast::BinOp::Assign(Some(ast::AssignOp::Sum)),
@@ -181,17 +181,32 @@ impl ParserState {
                 }
                 Some(&ast::Token::Equals) => ast::BinOp::Assign(None),
                 _ => {
-                    return Ok(equality_expression);
+                    return Ok(conditional_expression);
                 }
             };
 
             self.input.pop();
 
-            let next_equality = self.parse_equality_expression()?;
+            let next_equality = self.parse_conditional_expression()?;
 
-            equality_expression =
-                ast::Expression::new_binop(op, equality_expression.into(), next_equality.into());
+            conditional_expression =
+                ast::Expression::new_binop(op, conditional_expression.into(), next_equality.into());
         }
+    }
+
+    fn parse_conditional_expression(&mut self) -> ParseResult<ast::Expression> {
+        let mut equality_expression = self.parse_equality_expression()?;
+
+        if self.input.peek() == Some(&ast::Token::Question) {
+            self.input.pop();
+            let expression_if_true = self.parse_expression()?;
+            self.input.expect(&ast::Token::Colon)?;
+            let expression_if_false = self.parse_expression()?;
+
+            equality_expression = ast::Expression::new_conditional(Box::new(equality_expression), Box::new(expression_if_true), Box::new(expression_if_false));
+        }
+
+        Ok(equality_expression)
     }
 
     fn parse_equality_expression(&mut self) -> ParseResult<ast::Expression> {

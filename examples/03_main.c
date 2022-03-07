@@ -1,5 +1,4 @@
-#include <stdio.h>
-
+int printf(const char*, ...);
 int foo(int a, int b);
 
 

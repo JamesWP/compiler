@@ -331,6 +331,9 @@ impl CompilationState {
                 },
             },
             ast::ExpressionNode::Call(_, _) => todo!(),
+            ast::ExpressionNode::Conditional(_, _, _) => {
+                todo!();
+            },
         }
     }
 
@@ -592,6 +595,32 @@ impl CompilationState {
                         assemble!(self, op_suffix("neg"), result);
                     }
                 }
+            }
+            ast::ExpressionNode::Conditional(condition_expression, expression_if_true, expression_if_false) => {
+                self.debug_expression("conditional", condition_expression)?;
+                self.compile_expression(condition_expression)?;
+                let else_label = self.labels.allocate_label();
+                let end_label = self.labels.allocate_label();
+
+                // jump to else if $eax == zero
+                // TODO: support 8 byte values
+                assemble!(self, "cmp", DL::new(0), reg::EAX);
+                assemble!(self, "jz", else_label);
+
+                // --[if body]
+                self.compile_expression(expression_if_true)?;
+
+                // -- jump to end
+                assemble!(self, "jmp", end_label);
+
+                // else:
+                self.output_label(else_label)?;
+
+                // --[else body]
+                self.compile_expression(expression_if_false)?;
+
+                // end:
+                self.output_label(end_label)?;
             }
             ast::ExpressionNode::Value(v) => match v {
                 ast::Value::Literal(l) => match l {

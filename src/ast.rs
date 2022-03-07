@@ -23,6 +23,8 @@ pub enum Token {
     Value(i64),
     StringLiteral(String),
     CharLiteral(char),
+    Question,
+    Colon,
     Semicolon,
     Divide,
     Plus,
@@ -151,6 +153,7 @@ pub enum UnaryOp {
 pub enum ExpressionNode {
     Binary(BinOp, Box<Expression>, Box<Expression>),
     Unary(UnaryOp, Box<Expression>),
+    Conditional(Box<Expression>, Box<Expression>, Box<Expression>),
     Value(Value),
     Call(Box<Expression>, Vec<Expression>),
 }
@@ -454,6 +457,18 @@ impl Expression {
         Expression {
             expr_type,
             node: ExpressionNode::Value(value),
+        }
+    }
+    pub fn new_conditional(condition: Box<Expression>, expression_if_true: Box<Expression>, expression_if_false: Box<Expression>) -> Expression {
+        if expression_if_true.expr_type != expression_if_false.expr_type {
+            todo!("conditional has different types");
+        }
+
+        let expr_type = expression_if_true.expr_type.clone();
+        
+        Expression {
+            expr_type,
+            node: ExpressionNode::Conditional(condition, expression_if_true, expression_if_false)
         }
     }
 }

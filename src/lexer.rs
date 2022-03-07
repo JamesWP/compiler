@@ -190,6 +190,12 @@ impl Iterator for Lexer {
                 let token = token.replace("\\n", "\n");
                 Token::StringLiteral(token.to_owned())
             }
+            ':' => {
+                Token::Colon
+            }
+            '?' => {
+                Token::Question
+            }
             '/' | '+' | '-' | '*' | '<' | '>' | '=' | '!' => {
                 let t = char;
                 let n = self.source.peek();
