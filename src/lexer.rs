@@ -175,7 +175,7 @@ impl Iterator for Lexer {
                 let token = &token.as_str()[1..];
                 let char_value = match token.len() {
                     1 => token.chars().next().unwrap(),
-                    _ => todo!("more complex char literal")
+                    _ => todo!("more complex char literal"),
                 };
 
                 Token::CharLiteral(char_value)
@@ -190,12 +190,8 @@ impl Iterator for Lexer {
                 let token = token.replace("\\n", "\n");
                 Token::StringLiteral(token.to_owned())
             }
-            ':' => {
-                Token::Colon
-            }
-            '?' => {
-                Token::Question
-            }
+            ':' => Token::Colon,
+            '?' => Token::Question,
             '/' | '+' | '-' | '*' | '<' | '>' | '=' | '!' => {
                 let t = char;
                 let n = self.source.peek();

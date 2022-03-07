@@ -459,16 +459,20 @@ impl Expression {
             node: ExpressionNode::Value(value),
         }
     }
-    pub fn new_conditional(condition: Box<Expression>, expression_if_true: Box<Expression>, expression_if_false: Box<Expression>) -> Expression {
+    pub fn new_conditional(
+        condition: Box<Expression>,
+        expression_if_true: Box<Expression>,
+        expression_if_false: Box<Expression>,
+    ) -> Expression {
         if expression_if_true.expr_type != expression_if_false.expr_type {
             todo!("conditional has different types");
         }
 
         let expr_type = expression_if_true.expr_type.clone();
-        
+
         Expression {
             expr_type,
-            node: ExpressionNode::Conditional(condition, expression_if_true, expression_if_false)
+            node: ExpressionNode::Conditional(condition, expression_if_true, expression_if_false),
         }
     }
 }

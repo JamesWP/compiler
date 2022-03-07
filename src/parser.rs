@@ -203,7 +203,11 @@ impl ParserState {
             self.input.expect(&ast::Token::Colon)?;
             let expression_if_false = self.parse_expression()?;
 
-            equality_expression = ast::Expression::new_conditional(Box::new(equality_expression), Box::new(expression_if_true), Box::new(expression_if_false));
+            equality_expression = ast::Expression::new_conditional(
+                Box::new(equality_expression),
+                Box::new(expression_if_true),
+                Box::new(expression_if_false),
+            );
         }
 
         Ok(equality_expression)
@@ -413,7 +417,7 @@ impl ParserState {
                 self.input.pop();
                 (
                     ast::Value::Literal(ast::LiteralValue::CharLiteral(value)),
-                    ast::TypeDefinition::INT(TypeQualifier::from(true)),// This is strange, apparently in C sizeof('a') == 4!
+                    ast::TypeDefinition::INT(TypeQualifier::from(true)), // This is strange, apparently in C sizeof('a') == 4!
                 )
             }
             Some(ast::Token::Identifier(id)) => {

@@ -267,7 +267,11 @@ impl Default for StackLayout {
 
 impl Debug for StackLayout {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let stack_diagram: String = self.debug_information.iter().map(|num| (num%10).to_string()).collect();
+        let stack_diagram: String = self
+            .debug_information
+            .iter()
+            .map(|num| (num % 10).to_string())
+            .collect();
 
         f.debug_struct("StackLayout")
             .field("stack_size", &self.stack_size)
@@ -302,7 +306,8 @@ impl StackLayout {
         let last_allocation = self.last_allocated_byte;
 
         // Make space in the stack
-        self.last_allocated_byte = Self::allign_to(self.last_allocated_byte + size_in_bytes, size_in_bytes);
+        self.last_allocated_byte =
+            Self::allign_to(self.last_allocated_byte + size_in_bytes, size_in_bytes);
 
         self.stack_size = self.last_allocated_byte;
 

@@ -2,8 +2,8 @@ use crate::ast;
 use crate::intern;
 use crate::labels;
 use crate::platform;
-use crate::platform::DecimalLiteral as DL;
 use crate::platform::CharLiteral as CL;
+use crate::platform::DecimalLiteral as DL;
 use crate::platform::RegisterIndirectLocation;
 use crate::platform::StackRelativeLocation;
 use crate::platform::X86_64Reg as reg;
@@ -280,7 +280,11 @@ impl CompilationState {
         Ok(())
     }
 
-    fn debug_expression(&mut self, message: &str, expression: &ast::Expression) -> std::io::Result<()> {
+    fn debug_expression(
+        &mut self,
+        message: &str,
+        expression: &ast::Expression,
+    ) -> std::io::Result<()> {
         if self.debug {
             self.output_comment(format!("{}: {:#?}", message, expression))?;
         } else {
@@ -333,7 +337,7 @@ impl CompilationState {
             ast::ExpressionNode::Call(_, _) => todo!(),
             ast::ExpressionNode::Conditional(_, _, _) => {
                 todo!();
-            },
+            }
         }
     }
 
@@ -596,7 +600,11 @@ impl CompilationState {
                     }
                 }
             }
-            ast::ExpressionNode::Conditional(condition_expression, expression_if_true, expression_if_false) => {
+            ast::ExpressionNode::Conditional(
+                condition_expression,
+                expression_if_true,
+                expression_if_false,
+            ) => {
                 self.debug_expression("conditional", condition_expression)?;
                 self.compile_expression(condition_expression)?;
                 let else_label = self.labels.allocate_label();
