@@ -3,6 +3,7 @@ use crate::intern;
 use crate::labels;
 use crate::platform;
 use crate::platform::DecimalLiteral as DL;
+use crate::platform::CharLiteral as CL;
 use crate::platform::RegisterIndirectLocation;
 use crate::platform::StackRelativeLocation;
 use crate::platform::X86_64Reg as reg;
@@ -303,6 +304,7 @@ impl CompilationState {
             ast::ExpressionNode::Value(v) => match v {
                 ast::Value::Literal(l) => match l {
                     ast::LiteralValue::Int32(_) => todo!(),
+                    ast::LiteralValue::CharLiteral(_) => todo!(),
                     ast::LiteralValue::StringLiteral(value) => {
                         let label = self.intern.add(&value);
                         assemble!(self, "lea", format!("{}(%rip)", label), reg::RAX);
@@ -598,6 +600,9 @@ impl CompilationState {
                     }
                     ast::LiteralValue::StringLiteral(_) => {
                         self.compile_address(expression)?;
+                    }
+                    ast::LiteralValue::CharLiteral(c) => {
+                        assemble!(self, "movl", CL::new(c), result_32);
                     }
                 },
                 ast::Value::Identifier(_, _) => {

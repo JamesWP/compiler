@@ -22,6 +22,7 @@ pub enum Token {
     Paren(char),
     Value(i64),
     StringLiteral(String),
+    CharLiteral(char),
     Semicolon,
     Divide,
     Plus,
@@ -169,6 +170,7 @@ pub enum Value {
 pub enum LiteralValue {
     Int32(i32),
     StringLiteral(String),
+    CharLiteral(char),
 }
 
 impl From<Vec<Parameter>> for ParameterList {

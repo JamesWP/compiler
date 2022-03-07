@@ -174,11 +174,11 @@ impl Iterator for Lexer {
                 }
                 let token = &token.as_str()[1..];
                 let char_value = match token.len() {
-                    1 => token.as_bytes()[0] as i64,
+                    1 => token.chars().next().unwrap(),
                     _ => todo!("more complex char literal")
                 };
 
-                Token::Value(char_value)
+                Token::CharLiteral(char_value)
             }
             '\"' => {
                 let token = self.read_token(char, |c| c != '\"');

@@ -393,6 +393,14 @@ impl ParserState {
                         .as_pointer_to(TypeQualifier::from(false)),
                 )
             }
+            Some(ast::Token::CharLiteral(v)) => {
+                let value = v.clone();
+                self.input.pop();
+                (
+                    ast::Value::Literal(ast::LiteralValue::CharLiteral(value)),
+                    ast::TypeDefinition::INT(TypeQualifier::from(true)),// This is strange, apparently in C sizeof('a') == 4!
+                )
+            }
             Some(ast::Token::Identifier(id)) => {
                 let value = id.clone();
                 let ident_type = self.scope.find(&value);

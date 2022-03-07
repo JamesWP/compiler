@@ -46,6 +46,11 @@ int main(int argc, const char* argv[]){
     if (v != 's') {
         return 30;
     }
+
+    printf("Sizeof char literal 's' = %d", sizeof('s'));
+    if (sizeof('s') != 4) {
+        return 31;
+    }
     
     return 0;
 }

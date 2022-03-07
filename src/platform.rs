@@ -65,6 +65,9 @@ pub struct StackLayout {
 pub struct DecimalLiteral {
     value: i32,
 }
+pub struct CharLiteral {
+    value: char,
+}
 
 #[allow(dead_code)]
 const INTEGER_64_REGISTER_ORDER: [X86_64Reg; 6] = [
@@ -156,9 +159,23 @@ impl Display for DecimalLiteral {
     }
 }
 
+impl Display for CharLiteral {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(formatter, "$'{}'", self.value)
+    }
+}
+
 impl DecimalLiteral {
     pub fn new<T: std::borrow::Borrow<i32>>(value: T) -> DecimalLiteral {
         DecimalLiteral {
+            value: *value.borrow(),
+        }
+    }
+}
+
+impl CharLiteral {
+    pub fn new<T: std::borrow::Borrow<char>>(value: T) -> CharLiteral {
+        CharLiteral {
             value: *value.borrow(),
         }
     }
