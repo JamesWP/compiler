@@ -423,10 +423,7 @@ impl ParserState {
             Some(ast::Token::Reserved(ast::ResWord::Sizeof)) => {
                 self.input.pop();
 
-                //TODO: allow "sizeof a"?
-                self.input.expect(&ast::Token::Paren('('))?;
-                let expr = self.parse_expression()?;
-                self.input.expect(&ast::Token::Paren(')'))?;
+                let expr = self.parse_unary_expression()?;
 
                 // TODO: this should be an unsigned type
                 (

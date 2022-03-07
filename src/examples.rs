@@ -14,11 +14,13 @@ fn go(name: &str, command: &mut std::process::Command, program_output: &mut Stri
         let stderr = std::str::from_utf8(&output.stderr)
             .map(|s| s.to_owned())
             .unwrap_or(format!("bad utf8 output"));
-
-        if output.status.code().unwrap_or(1) == 0 {
+  
+        let status_code = output.status.code().unwrap_or(1);
+        if status_code == 0 {
             *program_output = format!("{}{}", stdout, stderr);
             Ok(())
         } else {
+            println!("RC {}", status_code);
             Err((stdout, stderr))
         }
     } else {

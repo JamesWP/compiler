@@ -51,6 +51,10 @@ int main(int argc, const char* argv[]){
     if (sizeof('s') != 4) {
         return 31;
     }
+
+    if (sizeof 'a' + 1 != 5) {
+        return 32;
+    }
     
     return 0;
 }
