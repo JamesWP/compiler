@@ -87,6 +87,7 @@ pub enum TypeDefinition {
 pub enum Statement {
     JumpStatement(JumpStatement),
     WhileStatement(WhileStatement),
+    DoStatement(Box<Statement>, Option<Expression>),
     IfStatement(IfStatement),
     DeclarationStatement(DeclarationStatement),
     CompoundStatement(Vec<Statement>),
@@ -243,6 +244,9 @@ impl Statement {
             Statement::DeclarationStatement(_) => {}
             Statement::Expression(_) => {}
             // These statements can contain other statements, visit them
+            Statement::DoStatement(w, _) => {
+                w.visit_statements(f);
+            }
             Statement::WhileStatement(w) => {
                 w.loop_body.visit_statements(f);
             }

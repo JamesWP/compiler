@@ -362,6 +362,21 @@ impl CompilationState {
                 assemble!(self, "popq", reg::RBP);
                 assemble!(self, "ret");
             }
+            ast::Statement::DoStatement(loop_body, None) => {
+                let start_label = self.labels.allocate_label();
+                self.output_label(&start_label)?;
+                self.compile_statement(loop_body)?;
+                assemble!(self, "jmp", &start_label);
+            }
+            ast::Statement::DoStatement(loop_body, Some(condition_expression)) => {
+                let start_label = self.labels.allocate_label();
+                self.output_label(&start_label)?;
+                self.compile_statement(loop_body)?;
+
+                self.compile_expression(condition_expression)?; 
+                assemble!(self, "cmp", DL::new(0), reg::RAX);
+                assemble!(self, "jnz", &start_label);
+            }
             ast::Statement::WhileStatement(ast::WhileStatement {
                 condition_expression,
                 loop_body,

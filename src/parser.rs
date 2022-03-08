@@ -100,6 +100,22 @@ impl ParserState {
                     ast::JumpStatement::ReturnWithValue(return_expr),
                 ))
             }
+        } else if self.input.peek() == Some(&ast::Token::Reserved(ast::ResWord::Do)) {
+            self.input.pop();
+            let loop_body = Box::new(self.parse_statement()?);
+            let condition_expression = match self.input.pop() {
+                Some(ast::Token::Reserved(ast::ResWord::While)) => {
+                    self.input.expect(&ast::Token::Paren('('))?;
+                    let condition_expression = self.parse_expression()?;
+                    self.input.expect(&ast::Token::Paren(')'))?;
+                    Some(condition_expression)
+                },
+                _ => None,
+            };
+            
+            self.input.expect(&ast::Token::Semicolon)?;
+
+            Ok(ast::Statement::DoStatement(loop_body, condition_expression))
         } else if self.input.peek() == Some(&ast::Token::Reserved(ast::ResWord::While)) {
             self.input.pop();
             self.input.expect(&ast::Token::Paren('('))?;
