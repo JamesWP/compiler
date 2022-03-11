@@ -373,7 +373,7 @@ impl CompilationState {
                 self.output_label(&start_label)?;
                 self.compile_statement(loop_body)?;
 
-                self.compile_expression(condition_expression)?; 
+                self.compile_expression(condition_expression)?;
                 assemble!(self, "cmp", DL::new(0), reg::RAX);
                 assemble!(self, "jnz", &start_label);
             }

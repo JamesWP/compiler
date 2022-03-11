@@ -109,10 +109,10 @@ impl ParserState {
                     let condition_expression = self.parse_expression()?;
                     self.input.expect(&ast::Token::Paren(')'))?;
                     Some(condition_expression)
-                },
+                }
                 _ => None,
             };
-            
+
             self.input.expect(&ast::Token::Semicolon)?;
 
             Ok(ast::Statement::DoStatement(loop_body, condition_expression))

@@ -425,7 +425,7 @@ impl Expression {
         };
 
         let node = match (&lhs.expr_type, &rhs.expr_type) {
-            (TypeDefinition::INT(_), TypeDefinition::POINTER(_, _))  => todo!("support int(+-)ptr"),
+            (TypeDefinition::INT(_), TypeDefinition::POINTER(_, _)) => todo!("support int(+-)ptr"),
             (TypeDefinition::POINTER(_, p_type), TypeDefinition::INT(_)) => {
                 // todo: scale the int
                 // Assume the lhs is a pointer to some type
@@ -446,14 +446,12 @@ impl Expression {
                 };
 
                 ExpressionNode::Binary(op, lhs, rhs)
-            },
-            (TypeDefinition::POINTER(_, _), TypeDefinition::CHAR(_)) |
-            (TypeDefinition::CHAR(_), TypeDefinition::POINTER(_, _)) => {
-                todo!("Can you add char types to pointer types?");
-            },
-            _ => {
-                ExpressionNode::Binary(op, lhs, rhs)
             }
+            (TypeDefinition::POINTER(_, _), TypeDefinition::CHAR(_))
+            | (TypeDefinition::CHAR(_), TypeDefinition::POINTER(_, _)) => {
+                todo!("Can you add char types to pointer types?");
+            }
+            _ => ExpressionNode::Binary(op, lhs, rhs),
         };
 
         Expression { expr_type, node }
