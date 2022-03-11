@@ -393,7 +393,7 @@ impl Expression {
     pub fn new_binop(op: BinOp, lhs: Box<Expression>, rhs: Box<Expression>) -> Expression {
         let int_result = TypeDefinition::INT(TypeQualifier::from(true));
         let char_result = TypeDefinition::INT(TypeQualifier::from(true));
-        let result_type = match op {
+        let expr_type = match op {
             BinOp::Difference | BinOp::Product | BinOp::Quotient | BinOp::Sum => {
                 use crate::ast::TypeDefinition::*;
                 match (&lhs.expr_type, &rhs.expr_type) {
@@ -424,10 +424,39 @@ impl Expression {
             BinOp::RightBitShift => todo!(),
         };
 
-        Expression {
-            expr_type: result_type,
-            node: ExpressionNode::Binary(op, lhs, rhs),
-        }
+        let node = match (&lhs.expr_type, &rhs.expr_type) {
+            (TypeDefinition::INT(_), TypeDefinition::POINTER(_, _))  => todo!("support int(+-)ptr"),
+            (TypeDefinition::POINTER(_, p_type), TypeDefinition::INT(_)) => {
+                // todo: scale the int
+                // Assume the lhs is a pointer to some type
+                let scale_literal = LiteralValue::Int32(p_type.size() as i32);
+
+                // If the size of the pointed is larger than one, we need to multiply
+                // e.g. skipping to the next 4 byte int in memory required 1*4 to be added
+                let rhs = match scale_literal {
+                    LiteralValue::Int32(1) => rhs,
+                    lv => Box::new(Expression::new_binop(
+                        BinOp::Product,
+                        rhs,
+                        Box::new(Expression::new_value(
+                            Value::Literal(lv),
+                            TypeDefinition::INT(true.into()),
+                        )),
+                    )),
+                };
+
+                ExpressionNode::Binary(op, lhs, rhs)
+            },
+            (TypeDefinition::POINTER(_, _), TypeDefinition::CHAR(_)) |
+            (TypeDefinition::CHAR(_), TypeDefinition::POINTER(_, _)) => {
+                todo!("Can you add char types to pointer types?");
+            },
+            _ => {
+                ExpressionNode::Binary(op, lhs, rhs)
+            }
+        };
+
+        Expression { expr_type, node }
     }
     pub fn new_unaryop(op: UnaryOp, lhs: Box<Expression>) -> Expression {
         // TODO: correctly detemine the type of the Deref op

@@ -353,36 +353,8 @@ impl ParserState {
                     self.input.pop();
 
                     // this is a postfix "array access"
-                    // a[b] => *(a+b*sizeof(a))
+                    // a[b] => *(a+b)
                     let postfix_expr = self.parse_expression()?;
-
-                    // Scale up the postfix to be a multiple of the size of the pointed value
-
-                    // Assume the lhs is a pointer to some type
-                    let scale = match &value.expr_type {
-                        ast::TypeDefinition::INT(_) => todo!("How can you index into an int?"),
-                        ast::TypeDefinition::CHAR(_) => todo!("How can you index into a char?"),
-                        ast::TypeDefinition::FUNCTION(_, _, _) => {
-                            todo!("How can you index into a function?")
-                        }
-                        ast::TypeDefinition::POINTER(_, p_type) => p_type.size(),
-                    };
-
-                    // If the size of the pointed is larger than one, we need to multiply
-                    // e.g. skipping to the next 4 byte int in memory required 1*4 to be added
-                    let postfix_expr = match scale {
-                        1 => postfix_expr,
-                        _ => ast::Expression::new_binop(
-                            ast::BinOp::Product,
-                            Box::new(postfix_expr),
-                            Box::new(ast::Expression::new_value(
-                                ast::Value::Literal(ast::LiteralValue::Int32(
-                                    scale.try_into().unwrap(),
-                                )),
-                                ast::TypeDefinition::INT(true.into()),
-                            )),
-                        ),
-                    };
 
                     self.input.expect(&ast::Token::Paren(']'))?;
 
