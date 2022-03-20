@@ -1,8 +1,5 @@
 #[cfg(test)]
 mod compiler_unit_tests {
-    use itertools::Itertools;
-    use std::fs;
-    use std::io::BufRead;
     fn go(name: &str, command: &mut std::process::Command, program_output: &mut String) -> bool {
         let args: Vec<_> = command
             .get_args()
@@ -88,7 +85,7 @@ mod compiler_unit_tests {
         )
     }
 
-    fn run(executable_file: &str, input_arguments: &[String], output_bytes: &mut String) -> bool {
+    fn run(executable_file: &str, input_arguments: &[&str], output_bytes: &mut String) -> bool {
         go(
             "RUN",
             std::process::Command::new(executable_file)
@@ -99,59 +96,50 @@ mod compiler_unit_tests {
     }
 
     macro_rules! compile {
-        (compare $program:ident $($filename:tt)*) => {
+        (compare $program:ident $($filename:expr)+ $(; argv $($arg:tt)+)?) => {
             #[test]
             pub fn $program() {
                 println!("=============================");
                 println!("======== Example {:02} =========", stringify!($program));
 
-                compile!(native $program $($filename)*);
-                compile!(test $program $($filename)*);
+                let ref_output = compile!(do_run "NATIVE" "ref" native_compile (stringify!($program)) $(file $filename)* $(; $($arg)+)?);
+                let test_output = compile!(do_run "TESTING" "test" compile (stringify!($program)) $(file $filename)* $(; $($arg)+)?);
+
+                assert_eq!(ref_output, test_output);
             }
         };
-        (native $program:tt $($filename:tt)*) => {
-            println!("----------- Building REFERENCE --------------");
-            let program_name = format!("target/{}_ref", stringify!($program));
-            let mut output = String::new();
-            assert!(link(&program_name, &[
-                $(
-                    {
-                        let input_name = format!("examples/{}.c", stringify!($filename));
-                        let object_name = format!("target/{}_ref.o", stringify!($filename));
-                        assert!(native_compile(&input_name, &object_name));
-                        object_name
-                    },
-                )*
-            ]));
-            assert!(run(&program_name, &[], &mut output));
-        };
-        (test $program:tt $($filename:tt)*) => {
-            println!("----------- Building TESTING --------------");
-            let program_name = format!("target/{}_test", stringify!($program));
-            let mut output = String::new();
-            let mut objects = Vec::new();
-            $(
-                    let input_name = format!("examples/{}.c", stringify!($filename));
-                    let object_name = format!("target/{}_test.o", stringify!($filename));
-                    assert!(compile(&input_name, &object_name));
-                    objects.push(object_name);
-            )*
-            assert!(link(&program_name, &objects));
-            assert!(run(&program_name, &[], &mut output));
+        (do_run $title:tt $suffix:tt $compile_func:tt $program:tt $(file $filename:expr)* $(; $($arg:tt)+)?) => {
+            {
+                println!("----------- Building {} --------------", $title);
+                let program_name = format!("target/{}_{}", stringify!($program), $suffix);
+                let mut output = String::new();
+                assert!(link(&program_name, &[
+                    $(
+                        {
+                            let input_name = format!("examples/{}.c", $filename);
+                            let object_name = format!("target/{}_ref.o", $filename);
+                            assert!($compile_func(&input_name, &object_name));
+                            object_name
+                        },
+                    )*
+                ]));
+                assert!(run(&program_name, &[$($($arg,)+)?], &mut output));
+                output
+            }
         };
     }
 
-    compile!(compare example_01 01_main 01_simple);
-    compile!(compare example_02 02_main 02_addition);
-    compile!(compare example_03 03_main 03_variables);
-    compile!(compare example_04 04_main 04_functions);
-    compile!(compare example_05 05_main);
-    compile!(compare example_06 06_arith);
-    compile!(compare example_07 07_selection);
-    compile!(compare example_08 08_while);
-    compile!(compare example_09 09_tests);
-    compile!(compare example_10 10_test);
-    compile!(compare example_11 11_scopes);
-    compile!(compare example_12 12_print_args);
-    compile!(compare example_13 13_loops);
+    compile!(compare example_01 "01_main" "01_simple");
+    compile!(compare example_02 "02_main" "02_addition");
+    compile!(compare example_03 "03_main" "03_variables");
+    compile!(compare example_04 "04_main" "04_functions");
+    compile!(compare example_05 "05_main");
+    compile!(compare example_06 "06_arith");
+    compile!(compare example_07 "07_selection");
+    compile!(compare example_08 "08_while");
+    compile!(compare example_09 "09_tests");
+    compile!(compare example_10 "10_test");
+    compile!(compare example_11 "11_scopes");
+    compile!(compare example_12 "12_print_args"; argv "testing" "testing again");
+    compile!(compare example_13 "13_loops");
 } // mod compiler_unit_tests

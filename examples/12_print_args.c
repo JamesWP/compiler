@@ -1,6 +1,3 @@
-// arg: testing
-// arg: testing again
-
 int printf(const char*, ...);
 
 int main(int argc, const char* argv[]){
