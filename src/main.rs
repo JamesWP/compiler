@@ -52,9 +52,9 @@ pub fn compile(compiler_options: &CompilerOptions) -> std::io::Result<()>{
     println!("Reading {}", compiler_options.filename);
 
     let file = fileiter::FileIter::from(std::fs::File::open(compiler_options.filename.clone())?);
-    let lexer = lexer::Lexer::new(Box::new(file), &compiler_options.filename);
+    let mut lexer = lexer::Lexer::new(Box::new(file), &compiler_options.filename);
 
-    let parser_input: parser::ParserInput = lexer.map(|(_l, t)| t).collect::<Vec<_>>().into();
+    let parser_input: parser::ParserInput = lexer.lex().into();
     let parser_input = if compiler_options.debug_lex {
         parser_input.enable_debug()
     } else {

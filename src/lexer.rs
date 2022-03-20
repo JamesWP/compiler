@@ -41,6 +41,16 @@ pub struct Location {
     end: Pos,
 }
 
+impl Location {
+    pub fn new(filename: &str, start: &Pos, end: &Pos) -> Location {
+        Location {
+            filename: filename.to_owned(),
+            start: start.clone(),
+            end: end.clone(),
+        }
+    }
+}
+
 impl Lexer {
     #[allow(dead_code)]
     pub fn new_from_string(content: String) -> Lexer {
@@ -56,21 +66,17 @@ impl Lexer {
             filename: filename.to_owned(),
         }
     }
-}
 
-impl Location {
-    pub fn new(filename: &str, start: &Pos, end: &Pos) -> Location {
-        Location {
-            filename: filename.to_owned(),
-            start: start.clone(),
-            end: end.clone(),
+    pub fn lex(&mut self) -> Vec<Token> {
+        let mut tokens = Vec::new();
+
+        while let Some(t) = self.next() {
+            tokens.push(t);
         }
+
+        tokens
     }
-}
 
-pub type Lex = (Location, Token);
-
-impl Lexer {
     fn is_ident(c: char) -> bool {
         if c.is_alphanumeric() || c == '_' {
             return true;
@@ -141,12 +147,8 @@ impl Lexer {
             }
         }
     }
-}
 
-impl Iterator for Lexer {
-    type Item = Lex;
-
-    fn next(&mut self) -> Option<Self::Item> {
+    fn next(&mut self) -> Option<Token> {
         self.skip_comments().ok()?;
 
         let start = self.source.pos();
@@ -280,9 +282,10 @@ impl Iterator for Lexer {
             }
         };
 
-        let location = Location::new(&self.filename, &start, &self.source.pos());
+        // TODO: add to token
+        let _location = Location::new(&self.filename, &start, &self.source.pos());
 
-        return Some((location, token));
+        return Some(token);
     }
 }
 
@@ -296,14 +299,14 @@ fn char() {
 
 #[test]
 fn test_lexer() {
-    let lexer = Lexer::new_from_string("Hello World".to_owned());
+    let mut lexer = Lexer::new_from_string("Hello World".to_owned());
 
-    let tokens: Vec<_> = lexer.collect();
+    let tokens: Vec<_> = lexer.lex();
 
     assert_eq!(tokens.len(), 2);
 
-    assert_eq!(tokens[0].1, Token::Identifier("Hello".to_owned()));
-    assert_eq!(tokens[1].1, Token::Identifier("World".to_owned()));
+    assert_eq!(tokens[0], Token::Identifier("Hello".to_owned()));
+    assert_eq!(tokens[1], Token::Identifier("World".to_owned()));
 }
 
 #[test]
@@ -317,16 +320,15 @@ fn test_simple() -> std::io::Result<()> {
     let content = String::from_utf8(buf)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?;
 
-    let lexer = Lexer::new_from_string(content);
+    let mut lexer = Lexer::new_from_string(content);
 
-    let tokens: Vec<_> = lexer.collect();
+    let tokens: Vec<_> = lexer.lex();
 
     for token in &tokens {
-        println!("Token: {:?}", token.1);
-        println!("    -: {:?} - {:?}", token.0.start, token.0.end);
+        println!("Token: {:?}", token);
+        //println!("    -: {:?} - {:?}", token.0.start, token.0.end);
     }
 
-    let tokens: Vec<_> = tokens.iter().map(|(_, t)| t).cloned().collect();
     assert_eq!(tokens.len(), 51);
 
     assert_eq!(tokens[0], Token::Reserved(ResWord::Int));
