@@ -17,6 +17,7 @@ pub enum ResWord {
 }
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
+    EOF,
     Reserved(ResWord),
     Identifier(String),
     Paren(char),

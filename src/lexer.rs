@@ -6,49 +6,10 @@ use crate::{
 pub trait CharPeekIt: Iterator<Item = char> {
     fn peek(&mut self) -> Option<char>;
     fn peek_peek(&mut self) -> Option<char>;
-    fn pos(&self) -> Pos;
-}
-
-#[derive(Clone, Debug)]
-#[allow(dead_code)]
-pub struct Pos {
-    line: u32,
-    col: u32,
-}
-
-impl Pos {
-    pub fn new(line: u32, col: u32) -> Pos {
-        Pos { line, col }
-    }
-}
-
-impl Default for Pos {
-    fn default() -> Pos {
-        Pos::new(0, 0)
-    }
 }
 
 pub struct Lexer {
     source: Box<dyn CharPeekIt>,
-    filename: String,
-}
-
-#[derive(Debug)]
-#[allow(dead_code)]
-pub struct Location {
-    filename: String,
-    start: Pos,
-    end: Pos,
-}
-
-impl Location {
-    pub fn new(filename: &str, start: &Pos, end: &Pos) -> Location {
-        Location {
-            filename: filename.to_owned(),
-            start: start.clone(),
-            end: end.clone(),
-        }
-    }
 }
 
 impl Lexer {
@@ -56,25 +17,35 @@ impl Lexer {
     pub fn new_from_string(content: String) -> Lexer {
         Lexer {
             source: Box::new(StringIter::new(content)),
-            filename: "raw_input_from_string.txt".to_owned(),
         }
     }
 
-    pub fn new(source: Box<dyn CharPeekIt>, filename: &str) -> Lexer {
-        Lexer {
-            source,
-            filename: filename.to_owned(),
-        }
+    pub fn new(source: Box<dyn CharPeekIt>, _filename: &str) -> Lexer {
+        Lexer { source }
     }
 
     pub fn lex(&mut self) -> Vec<Token> {
         let mut tokens = Vec::new();
 
-        while let Some(t) = self.next() {
-            tokens.push(t);
+        loop {
+            let next = self.next();
+            if let Some(Token::EOF) = next {
+                break;
+            }
+            if let Some(t) = next {
+                tokens.push(t);
+            }
         }
 
         tokens
+    }
+
+    fn matches(&mut self, c: char) -> bool {
+        if Some(c) == self.source.peek() {
+            self.next();
+            return true;
+        }
+        return false;
     }
 
     fn is_ident(c: char) -> bool {
@@ -84,6 +55,11 @@ impl Lexer {
         false
     }
 
+    fn skip_till_match(&mut self, c: char) {
+        while !self.matches(c) {
+            self.source.next();
+        }
+    }
     fn read_token(&mut self, c: char, fun: fn(char) -> bool) -> String {
         let mut chars = String::new();
         chars.push(c);
@@ -99,78 +75,30 @@ impl Lexer {
         chars
     }
 
-    fn skip_comments(&mut self) -> Result<(), &'static str> {
-        loop {
-            self.read_token('0', |c| c.is_whitespace());
-
-            let next = self.source.peek();
-            let next_next = self.source.peek_peek();
-            match (next, next_next) {
-                (Some('/'), Some('*')) => {
-                    self.source.next();
-                    self.source.next();
-
-                    loop {
-                        let next = self.source.peek();
-                        let next_next = self.source.peek_peek();
-
-                        if None == next || None == next_next {
-                            eprintln!("EOF while lexing comment");
-                            return Err("EOF while lexing comment");
-                        }
-
-                        if Some('*') == next && Some('/') == next_next {
-                            self.source.next();
-                            self.source.next();
-                            break;
-                        }
-
-                        self.source.next();
-                    }
-                }
-                (Some('/'), Some('/')) => loop {
-                    let next = self.source.peek();
-                    if None == next {
-                        eprintln!("EOF while lexing comment");
-                        return Err("EOF while lexing comment");
-                    }
-                    if Some('\n') == next {
-                        self.source.next();
-                        break;
-                    }
-
-                    self.source.next();
-                },
-                _ => {
-                    return Ok(());
-                }
-            }
-        }
-    }
-
     fn next(&mut self) -> Option<Token> {
-        self.skip_comments().ok()?;
 
-        let start = self.source.pos();
-        let char: char = self.source.next()?;
+        let c: Option<char> = self.source.next();
 
-        let token = match &char {
-            '{' | '}' | '(' | ')' | '[' | ']' => Token::Paren(char),
+        if None == c {
+            return Some(Token::EOF);
+        }
+
+        let c = c.unwrap();
+
+        let token = match c {
+            ' ' | '\t' | '\n' => {
+                return None;
+            }
+            '{' => Token::Paren('{'),
+            '}' => Token::Paren('}'),
+            '(' => Token::Paren('('),
+            ')' => Token::Paren(')'),
+            '[' => Token::Paren('['),
+            ']' => Token::Paren(']'),
             ';' => Token::Semicolon,
             ',' => Token::Comma,
-            '0'..='9' => {
-                let token = self.read_token(char, |c| c.is_numeric());
-                let value = token.parse::<i64>();
-
-                if let Ok(value) = value {
-                    Token::Value(value)
-                } else {
-                    eprintln!("Unable to lex Value token from {}", token);
-                    return None;
-                }
-            }
             '\'' => {
-                let token = self.read_token(char, |c| c != '\'');
+                let token = self.read_token(' ', |c| c != '\'');
                 if self.source.next() != Some('\'') {
                     unimplemented!("Expected \' while lexing");
                 }
@@ -183,7 +111,7 @@ impl Lexer {
                 Token::CharLiteral(char_value)
             }
             '\"' => {
-                let token = self.read_token(char, |c| c != '\"');
+                let token = self.read_token(' ', |c| c != '\"');
                 if self.source.next() != Some('\"') {
                     unimplemented!("Expected \" while lexing");
                 }
@@ -194,96 +122,129 @@ impl Lexer {
             }
             ':' => Token::Colon,
             '?' => Token::Question,
-            '/' | '+' | '-' | '*' | '<' | '>' | '=' | '!' => {
-                let t = char;
-                let n = self.source.peek();
-
-                match (t, n) {
-                    ('/', Some('=')) => {
-                        self.source.next();
-                        Token::DivideEquals
+            '/' => {
+                if self.matches('/') {
+                    // comment '//'
+                    self.skip_till_match('\n');
+                    return None;
+                } 
+                if self.matches('*') {
+                    // comment '/*'
+                    loop {
+                        //TODO: handle EOF while searching for end
+                        self.skip_till_match('*');
+                        if self.matches('/') {
+                            break;
+                        }
                     }
-                    ('*', Some('=')) => {
-                        self.source.next();
-                        Token::MultiplyEquals
-                    }
-                    ('-', Some('=')) => {
-                        self.source.next();
-                        Token::MinusEquals
-                    }
-                    ('+', Some('=')) => {
-                        self.source.next();
-                        Token::PlusEquals
-                    }
-                    ('<', Some('<')) => {
-                        self.source.next();
-                        Token::LeftBitShift
-                    }
-                    ('>', Some('>')) => {
-                        self.source.next();
-                        Token::RightBitShift
-                    }
-                    ('=', Some('=')) => {
-                        self.source.next();
-                        Token::Equality
-                    }
-                    ('!', Some('=')) => {
-                        self.source.next();
-                        Token::NotEquality
-                    }
-                    ('=', _) => Token::Equals,
-                    ('*', _) => Token::Star,
-                    ('/', _) => Token::Divide,
-                    ('-', _) => Token::Minus,
-                    ('+', _) => Token::Plus,
-                    ('<', _) => Token::LessThan,
-                    ('>', _) => Token::GreaterThan,
-                    ('!', _) => Token::Not,
-                    _ => unreachable!(),
+                    return None;
+                }
+                
+                if self.matches('=') {
+                    Token::DivideEquals
+                } else {
+                    Token::Divide
+                }
+            }
+            '+' => {
+                if self.matches('=') {
+                    Token::PlusEquals
+                } else {
+                    Token::Plus
+                }
+            }
+            '-' => {
+                if self.matches('=') {
+                    Token::MinusEquals
+                } else {
+                    Token::Minus
+                }
+            }
+            '*' => {
+                if self.matches('=') {
+                    Token::MultiplyEquals
+                } else {
+                    Token::Star
+                }
+            }
+            '<' => {
+                if self.matches('<') {
+                    Token::LeftBitShift
+                } else {
+                    Token::LessThan
+                }
+            }
+            '>' => {
+                if self.matches('>') {
+                    Token::RightBitShift
+                } else {
+                    Token::GreaterThan
+                }
+            }
+            '=' => {
+                if self.matches('=') {
+                    Token::Equality
+                } else {
+                    Token::Equals
+                }
+            }
+            '!' => {
+                if self.matches('=') {
+                    Token::NotEquality
+                } else {
+                    Token::Not
                 }
             }
             '.' => {
-                let token = self.read_token(char, |c| c == '.');
+                let token = self.read_token('.', |c| c == '.');
                 if token == "..." {
                     Token::Elipsis
                 } else {
                     unimplemented!("single dot");
                 }
             }
-            _ => {
-                let token = self.read_token(char, Lexer::is_ident);
-                if token == "int" {
-                    Token::Reserved(ResWord::Int)
-                } else if token == "char" {
-                    Token::Reserved(ResWord::Char)
-                } else if token == "const" {
-                    Token::Reserved(ResWord::Const)
-                } else if token == "return" {
-                    Token::Reserved(ResWord::Return)
-                } else if token == "if" {
-                    Token::Reserved(ResWord::If)
-                } else if token == "else" {
-                    Token::Reserved(ResWord::Else)
-                } else if token == "while" {
-                    Token::Reserved(ResWord::While)
-                } else if token == "do" {
-                    Token::Reserved(ResWord::Do)
-                } else if token == "for" {
-                    Token::Reserved(ResWord::For)
-                } else if token == "continue" {
-                    Token::Reserved(ResWord::Continue)
-                } else if token == "break" {
-                    Token::Reserved(ResWord::Break)
-                } else if token == "sizeof" {
-                    Token::Reserved(ResWord::Sizeof)
+            c => {
+                if c.is_numeric() {
+                    let token = self.read_token(c, |c| c.is_numeric());
+                    let value = token.parse::<i64>();
+                    if let Ok(value) = value {
+                        Token::Value(value)
+                    } else {
+                        eprintln!("Unable to lex Value token from {}", token);
+                        return None;
+                    }
                 } else {
-                    Token::Identifier(token)
+                    let token = self.read_token(c, Lexer::is_ident);
+                    if token == "int" {
+                        Token::Reserved(ResWord::Int)
+                    } else if token == "char" {
+                        Token::Reserved(ResWord::Char)
+                    } else if token == "const" {
+                        Token::Reserved(ResWord::Const)
+                    } else if token == "return" {
+                        Token::Reserved(ResWord::Return)
+                    } else if token == "if" {
+                        Token::Reserved(ResWord::If)
+                    } else if token == "else" {
+                        Token::Reserved(ResWord::Else)
+                    } else if token == "while" {
+                        Token::Reserved(ResWord::While)
+                    } else if token == "do" {
+                        Token::Reserved(ResWord::Do)
+                    } else if token == "for" {
+                        Token::Reserved(ResWord::For)
+                    } else if token == "continue" {
+                        Token::Reserved(ResWord::Continue)
+                    } else if token == "break" {
+                        Token::Reserved(ResWord::Break)
+                    } else if token == "sizeof" {
+                        Token::Reserved(ResWord::Sizeof)
+                    } else {
+                        Token::Identifier(token)
+                    }
                 }
             }
         };
-
-        // TODO: add to token
-        let _location = Location::new(&self.filename, &start, &self.source.pos());
 
         return Some(token);
     }

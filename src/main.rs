@@ -48,7 +48,7 @@ pub struct CompilerOptions {
     debug_ast: bool,
 }
 
-pub fn compile(compiler_options: &CompilerOptions) -> std::io::Result<()>{
+pub fn compile(compiler_options: &CompilerOptions) -> std::io::Result<()> {
     println!("Reading {}", compiler_options.filename);
 
     let file = fileiter::FileIter::from(std::fs::File::open(compiler_options.filename.clone())?);

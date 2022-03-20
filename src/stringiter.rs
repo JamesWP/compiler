@@ -1,5 +1,4 @@
 use crate::lexer::CharPeekIt;
-use crate::lexer::Pos;
 
 pub struct StringIter {
     str: String,
@@ -38,10 +37,6 @@ impl CharPeekIt for StringIter {
 
             Some(char)
         }
-    }
-
-    fn pos(&self) -> Pos {
-        Pos::new(self.line, self.col)
     }
 }
 

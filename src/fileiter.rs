@@ -1,5 +1,4 @@
 use crate::lexer::CharPeekIt;
-use crate::lexer::Pos;
 use std::io::Read;
 
 pub struct FileIter {
@@ -58,10 +57,6 @@ impl Iterator for FileIter {
 }
 
 impl CharPeekIt for FileIter {
-    fn pos(&self) -> Pos {
-        Pos::new(self.line, self.col)
-    }
-
     fn peek(&mut self) -> Option<char> {
         self.fill_buffer();
 
