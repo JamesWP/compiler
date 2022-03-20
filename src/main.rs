@@ -11,43 +11,51 @@ mod scope;
 mod stringiter;
 
 fn main() -> std::io::Result<()> {
-    let mut filename = "examples/01_simple.c".to_owned();
-    let mut output_filename = "a.S".to_owned();
-
-    let mut set_output = false;
-    let mut print_lex = false;
-    let mut print_ast = false;
+    let mut options = CompilerOptions {
+        filename: "examples/01_simple.c".to_owned(),
+        output_filename: "a.o".to_owned(),
+        debug_ast: false,
+        debug_lex: false,
+    };
 
     let mut args = std::env::args().skip(1);
 
     while let Some(arg) = args.next() {
         if arg == "-o" {
-            set_output = true;
+            let output_filename = args.next().expect("filename should follow -o").clone();
+            options.output_filename = output_filename;
             continue;
         }
         if arg == "-l" {
-            print_lex = true;
+            options.debug_lex = true;
             continue;
         }
         if arg == "-d" {
-            print_ast = true;
+            options.debug_ast = true;
             continue;
-        }
-        if set_output {
-            output_filename = arg;
-            set_output = false;
         } else {
-            filename = arg;
+            options.filename = arg;
         }
     }
 
-    println!("Reading {}", filename);
+    compile(&options)
+}
 
-    let file = fileiter::FileIter::from(std::fs::File::open(filename.clone())?);
-    let lexer = lexer::Lexer::new(Box::new(file), &filename);
+pub struct CompilerOptions {
+    filename: String,
+    output_filename: String,
+    debug_lex: bool,
+    debug_ast: bool,
+}
+
+pub fn compile(compiler_options: &CompilerOptions) -> std::io::Result<()>{
+    println!("Reading {}", compiler_options.filename);
+
+    let file = fileiter::FileIter::from(std::fs::File::open(compiler_options.filename.clone())?);
+    let lexer = lexer::Lexer::new(Box::new(file), &compiler_options.filename);
 
     let parser_input: parser::ParserInput = lexer.map(|(_l, t)| t).collect::<Vec<_>>().into();
-    let parser_input = if print_lex {
+    let parser_input = if compiler_options.debug_lex {
         parser_input.enable_debug()
     } else {
         parser_input
@@ -63,20 +71,20 @@ fn main() -> std::io::Result<()> {
 
     let translation_unit = translation_unit.unwrap();
 
-    let assembly = compiler::compile(&translation_unit, print_ast)?;
+    let assembly = compiler::compile(&translation_unit, compiler_options.debug_ast)?;
 
-    std::fs::write(output_filename.clone(), &assembly)?;
+    std::fs::write(compiler_options.output_filename.clone(), &assembly)?;
 
     use std::io::Write;
     for (line_no, line) in assembly.lines().enumerate() {
         println!("{:<03}    {}", line_no + 1, line);
     }
 
-    println!("Written to {}", output_filename);
+    println!("Written to {}", compiler_options.output_filename);
 
     let mut child = std::process::Command::new("as")
         .arg("-")
-        .args(["-o", &output_filename])
+        .args(["-o", &compiler_options.output_filename])
         .stdin(std::process::Stdio::piped())
         .spawn()?;
     child

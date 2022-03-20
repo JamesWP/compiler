@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod compiler_unit_tests {
+    use crate::{compile, CompilerOptions};
     fn go(name: &str, command: &mut std::process::Command, program_output: &mut String) -> bool {
         let args: Vec<_> = command
             .get_args()
@@ -48,7 +49,7 @@ mod compiler_unit_tests {
         result.is_ok()
     }
 
-    fn native_compile(source_file: &str, object_file: &str) -> bool {
+    fn ref_compile(source_file: &str, object_file: &str) -> bool {
         let mut output = String::new();
         go(
             "NATIVE CC",
@@ -61,16 +62,30 @@ mod compiler_unit_tests {
         )
     }
 
-    fn compile(source_file: &str, object_file: &str) -> bool {
-        let mut output = String::new();
-        go(
-            "COMPILER",
-            std::process::Command::new("target/debug/compiler")
-                .arg(source_file)
-                .arg("-o")
-                .arg(object_file),
-            &mut output,
-        )
+    fn test_compile(source_file: &str, object_file: &str) -> bool {
+        let options = CompilerOptions {
+            filename: source_file.to_owned(),
+            output_filename: object_file.to_owned(),
+            debug_lex: false,
+            debug_ast: false,
+        };
+
+        let result = compile(&options);
+
+        // stdout for testing compile
+        {
+            let program = "target/debug/compiler";
+            let args = [source_file, "-o", object_file];
+            println!(
+                "[{:<10}] {}: {} {}",
+                "COMPILER",
+                if result.is_ok() { "SUCCESS" } else { "FAILED" },
+                program,
+                args.join(" ")
+            );
+        }
+
+        result.is_ok()
     }
 
     fn link(executable_file: &str, object_files: &[String]) -> bool {
@@ -102,8 +117,8 @@ mod compiler_unit_tests {
                 println!("=============================");
                 println!("======== Example {:02} =========", stringify!($program));
 
-                let ref_output = compile!(do_run "NATIVE" "ref" native_compile (stringify!($program)) $(file $filename)* $(; $($arg)+)?);
-                let test_output = compile!(do_run "TESTING" "test" compile (stringify!($program)) $(file $filename)* $(; $($arg)+)?);
+                let ref_output = compile!(do_run "NATIVE" "ref" ref_compile (stringify!($program)) $(file $filename)* $(; $($arg)+)?);
+                let test_output = compile!(do_run "TESTING" "test" test_compile (stringify!($program)) $(file $filename)* $(; $($arg)+)?);
 
                 assert_eq!(ref_output, test_output);
             }
@@ -142,4 +157,5 @@ mod compiler_unit_tests {
     compile!(compare example_11 "11_scopes");
     compile!(compare example_12 "12_print_args"; argv "testing" "testing again");
     compile!(compare example_13 "13_loops");
+    //compile!(compare example_14 "14_preprocess_subst");
 } // mod compiler_unit_tests
