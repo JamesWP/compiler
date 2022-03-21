@@ -41,6 +41,8 @@ fn main() -> std::io::Result<()> {
     compile(&options)
 }
 
+
+#[derive(Debug)]
 pub struct CompilerOptions {
     filename: String,
     output_filename: String,
@@ -60,18 +62,29 @@ pub fn compile(compiler_options: &CompilerOptions) -> std::io::Result<()> {
     } else {
         parser_input
     };
-    let translation_unit = parser::ParserState::new(parser_input).parse_translation_unit();
 
-    if translation_unit.is_err() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            translation_unit.err().unwrap(),
-        ));
-    }
+    let translation_unit = match parser::ParserState::new(parser_input).parse_translation_unit() {
+        Ok(translation_unit) => translation_unit,
+        Err(error) => {
+            eprintln!("Parser error {}", error);
+            eprintln!("Found while parsing {:?}", &compiler_options);
+            
+            let error = std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                error 
+            );
+            return Err(error);
+        }
+    };
 
-    let translation_unit = translation_unit.unwrap();
-
-    let assembly = compiler::compile(&translation_unit, compiler_options.debug_ast)?;
+    let assembly = match compiler::compile(&translation_unit, compiler_options.debug_ast) {
+        Ok(assembly) => assembly,
+        Err(error) => {
+            eprintln!("Compilation error {}", error);
+            eprintln!("Found while compiling {:?}", &compiler_options);
+            return Err(error);
+        }
+    };
 
     std::fs::write(compiler_options.output_filename.clone(), &assembly)?;
 
@@ -79,8 +92,6 @@ pub fn compile(compiler_options: &CompilerOptions) -> std::io::Result<()> {
     for (line_no, line) in assembly.lines().enumerate() {
         println!("{:<03}    {}", line_no + 1, line);
     }
-
-    println!("Written to {}", compiler_options.output_filename);
 
     let mut child = std::process::Command::new("as")
         .arg("-")
@@ -102,7 +113,7 @@ pub fn compile(compiler_options: &CompilerOptions) -> std::io::Result<()> {
         ));
     }
 
-    println!("Assembled to a.out");
+    println!("Assembled to {}", compiler_options.output_filename);
 
     Ok(())
 }
