@@ -59,7 +59,7 @@ impl CompilationState {
         Ok(())
     }
     fn output_asciiz(&mut self, data: &str) -> std::io::Result<()> {
-        writeln!(self.output, ".asciz {:?}", data).unwrap();
+        writeln!(self.output, ".asciz \"{:}\"", data).unwrap();
         Ok(())
     }
     fn output_label<T: Display>(&mut self, name: T) -> std::io::Result<()> {

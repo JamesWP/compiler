@@ -1,29 +1,23 @@
 use crate::scope::SharedOptionStackLocation;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum ResWord {
-    Return,
-    Int,
-    Char,
-    Const,
-    If,
-    Else,
-    While,
-    For,
-    Do,
-    Break,
-    Continue,
-    Sizeof,
+pub struct Token {
+    pub tt: TokenType,
 }
+
 #[derive(Debug, Clone, PartialEq)]
-pub enum Token {
+pub enum TokenType {
     EOF,
-    Reserved(ResWord),
     Identifier(String),
-    Paren(char),
+    LBrace,
+    RBrace,
+    LSquare,
+    RSquare,
+    LParen,
+    RParen,
     Value(i64),
     StringLiteral(String),
-    CharLiteral(char),
+    CharLiteral(String),
     Question,
     Colon,
     Semicolon,
@@ -45,6 +39,56 @@ pub enum Token {
     DivideEquals,
     MultiplyEquals,
     Not,
+    Return,
+    Int,
+    Char,
+    Const,
+    If,
+    Else,
+    While,
+    For,
+    Do,
+    Break,
+    Continue,
+    Sizeof,
+}
+
+impl AsRef<TokenType> for TokenType {
+    fn as_ref(&self) -> &TokenType {
+        &self
+    }
+}
+
+impl From<String> for TokenType {
+    fn from(token: String) -> Self {
+        if token == "int" {
+            TokenType::Int
+        } else if token == "char" {
+            TokenType::Char
+        } else if token == "const" {
+            TokenType::Const
+        } else if token == "return" {
+            TokenType::Return
+        } else if token == "if" {
+            TokenType::If
+        } else if token == "else" {
+            TokenType::Else
+        } else if token == "while" {
+            TokenType::While
+        } else if token == "do" {
+            TokenType::Do
+        } else if token == "for" {
+            TokenType::For
+        } else if token == "continue" {
+            TokenType::Continue
+        } else if token == "break" {
+            TokenType::Break
+        } else if token == "sizeof" {
+            TokenType::Sizeof
+        } else {
+            TokenType::Identifier(token)
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -120,25 +120,25 @@ mod compiler_unit_tests {
                 let ref_output = compile!(do_run "NATIVE" "ref" ref_compile (stringify!($program)) $(file $filename)* $(; $($arg)+)?);
                 let test_output = compile!(do_run "TESTING" "test" test_compile (stringify!($program)) $(file $filename)* $(; $($arg)+)?);
 
-                assert_eq!(ref_output, test_output);
+                assert_eq!(ref_output, test_output, "Output should be the same");
             }
         };
         (do_run $title:tt $suffix:tt $compile_func:tt $program:tt $(file $filename:expr)* $(; $($arg:tt)+)?) => {
             {
                 println!("----------- Building {} --------------", $title);
-                let program_name = format!("target/{}_{}", stringify!($program), $suffix);
+                let program_name = format!("target/{}_{}", $program, $suffix);
                 let mut output = String::new();
                 assert!(link(&program_name, &[
                     $(
                         {
                             let input_name = format!("examples/{}.c", $filename);
                             let object_name = format!("target/{}_ref.o", $filename);
-                            assert!($compile_func(&input_name, &object_name));
+                            assert!($compile_func(&input_name, &object_name), "compiler exited with non zero exit");
                             object_name
                         },
                     )*
-                ]));
-                assert!(run(&program_name, &[$($($arg,)+)?], &mut output));
+                ]), "Link failure for {}", program_name);
+                assert!(run(&program_name, &[$($($arg,)+)?], &mut output), "program exited with non zero exit code");
                 output
             }
         };
