@@ -1,4 +1,4 @@
-use std::{io::Read};
+use std::io::Read;
 
 mod ast;
 mod compiler;
@@ -16,6 +16,7 @@ fn main() -> std::io::Result<()> {
         output_filename: "a.o".to_owned(),
         debug_ast: false,
         debug_lex: false,
+        debug_pp: false,
     };
 
     let mut args = std::env::args().skip(1);
@@ -30,6 +31,10 @@ fn main() -> std::io::Result<()> {
             options.debug_lex = true;
             continue;
         }
+        if arg == "-p" {
+            options.debug_pp = true;
+            continue;
+        }
         if arg == "-d" {
             options.debug_ast = true;
             continue;
@@ -41,13 +46,13 @@ fn main() -> std::io::Result<()> {
     compile(&options)
 }
 
-
 #[derive(Debug)]
 pub struct CompilerOptions {
     filename: String,
     output_filename: String,
     debug_lex: bool,
     debug_ast: bool,
+    debug_pp: bool,
 }
 
 pub fn compile(compiler_options: &CompilerOptions) -> std::io::Result<()> {
@@ -57,9 +62,24 @@ pub fn compile(compiler_options: &CompilerOptions) -> std::io::Result<()> {
 
     std::fs::File::open(compiler_options.filename.clone())?.read_to_end(&mut buf)?;
 
-    let mut lexer = lexer::Lexer::new(std::str::from_utf8(&buf).unwrap().to_string(), &compiler_options.filename);
+    let mut lexer = lexer::Lexer::new(
+        std::str::from_utf8(&buf).unwrap().to_string(),
+        &compiler_options.filename,
+    );
 
-    let parser_input: parser::ParserInput = lexer.lex().into();
+    let parser_input = lexer.lex();
+
+    if compiler_options.debug_pp {
+        for token in &parser_input {
+            if token.is_bol {
+                println!();
+            }
+            print!("{} ", token);
+        }
+        println!();
+    }
+
+    let parser_input: parser::ParserInput = parser_input.into();
     let parser_input = if compiler_options.debug_lex {
         parser_input.enable_debug()
     } else {
@@ -71,11 +91,8 @@ pub fn compile(compiler_options: &CompilerOptions) -> std::io::Result<()> {
         Err(error) => {
             eprintln!("Parser error {}", error);
             eprintln!("Found while parsing {:?}", &compiler_options);
-            
-            let error = std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                error 
-            );
+
+            let error = std::io::Error::new(std::io::ErrorKind::InvalidInput, error);
             return Err(error);
         }
     };

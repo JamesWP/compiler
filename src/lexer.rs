@@ -1,10 +1,11 @@
-use crate::{
-    ast::{Token, TokenType},
-};
+use crate::ast::{Token, TokenType};
 
 struct LexerInput {
     source: Vec<char>,
     pos: usize,
+    line: usize,
+    column: usize,
+    lines: Vec<String>,
 }
 
 impl LexerInput {
@@ -14,7 +15,27 @@ impl LexerInput {
 
     pub fn next(&mut self) -> char {
         self.pos += 1;
-        *self.source.get(self.pos-1).unwrap()
+        let c = *self.source.get(self.pos - 1).unwrap();
+
+        match c {
+            '\n' => {
+                self.line += 1;
+                self.column = 1;
+            }
+            _ => {
+                self.column += 1;
+            }
+        }
+
+        c
+    }
+
+    pub fn pos(&self) -> (usize, usize, usize) {
+        (self.line, self.column, self.pos)
+    }
+
+    pub fn text(&self, start: usize, end: usize) -> String {
+        self.source[start..end].iter().collect()
     }
 }
 
@@ -23,17 +44,24 @@ impl From<String> for LexerInput {
         LexerInput {
             source: string.chars().collect(),
             pos: 0,
+            line: 1,
+            column: 1,
+            lines: string.lines().map(str::to_owned).collect(),
         }
     }
 }
 
 pub struct Lexer {
-    source: LexerInput
+    source: LexerInput,
+    is_bol: bool,
 }
 
 impl Lexer {
     pub fn new(source: String, _filename: &str) -> Lexer {
-        Lexer { source: source.into() }
+        Lexer {
+            source: source.into(),
+            is_bol: true,
+        }
     }
 
     pub fn lex(&mut self) -> Vec<Token> {
@@ -93,13 +121,20 @@ impl Lexer {
 
     fn next(&mut self) -> Option<Token> {
         if None == self.source.peek() {
-            return Some(Token { tt: TokenType::EOF });
+            return Some(Token::default());
         }
+
+        let token_start = self.source.pos();
+        let is_bol = self.is_bol;
 
         let c = self.source.next();
 
         let token_type = match c {
-            ' ' | '\t' | '\n' | '\r' => {
+            ' ' | '\t' | '\r' => {
+                return None;
+            }
+            '\n' => {
+                self.is_bol = true;
                 return None;
             }
             '{' => TokenType::LBrace,
@@ -235,7 +270,17 @@ impl Lexer {
             }
         };
 
-        return Some(Token { tt: token_type });
+        self.is_bol = false;
+
+        let token_end = self.source.pos();
+
+        return Some(Token {
+            tt: token_type,
+            token_start,
+            token_end,
+            is_bol,
+            token_text: self.source.text(token_start.2, token_end.2),
+        });
     }
 }
 

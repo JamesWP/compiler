@@ -1,8 +1,32 @@
+use std::fmt::Display;
+
 use crate::scope::SharedOptionStackLocation;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Token {
     pub tt: TokenType,
+    pub token_start: (usize, usize, usize),
+    pub token_end: (usize, usize, usize),
+    pub is_bol: bool,
+    pub token_text: String,
+}
+
+impl Default for Token {
+    fn default() -> Self {
+        Token {
+            tt: TokenType::EOF,
+            token_start: (0, 0, 0),
+            token_end: (0, 0, 0),
+            is_bol: true,
+            token_text: String::new(),
+        }
+    }
+}
+
+impl Display for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.token_text)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

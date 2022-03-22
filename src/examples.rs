@@ -68,6 +68,7 @@ mod compiler_unit_tests {
             output_filename: object_file.to_owned(),
             debug_lex: false,
             debug_ast: false,
+            debug_pp: false,
         };
 
         let result = compile(&options);
