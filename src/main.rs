@@ -1,14 +1,14 @@
+use std::{io::Read};
+
 mod ast;
 mod compiler;
 mod examples;
-mod fileiter;
 mod intern;
 mod labels;
 mod lexer;
 mod parser;
 mod platform;
 mod scope;
-mod stringiter;
 
 fn main() -> std::io::Result<()> {
     let mut options = CompilerOptions {
@@ -53,8 +53,11 @@ pub struct CompilerOptions {
 pub fn compile(compiler_options: &CompilerOptions) -> std::io::Result<()> {
     println!("Reading {}", compiler_options.filename);
 
-    let file = fileiter::FileIter::from(std::fs::File::open(compiler_options.filename.clone())?);
-    let mut lexer = lexer::Lexer::new(Box::new(file), &compiler_options.filename);
+    let mut buf = Vec::new();
+
+    std::fs::File::open(compiler_options.filename.clone())?.read_to_end(&mut buf)?;
+
+    let mut lexer = lexer::Lexer::new(std::str::from_utf8(&buf).unwrap().to_string(), &compiler_options.filename);
 
     let parser_input: parser::ParserInput = lexer.lex().into();
     let parser_input = if compiler_options.debug_lex {

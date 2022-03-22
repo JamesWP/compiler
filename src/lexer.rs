@@ -1,27 +1,39 @@
 use crate::{
     ast::{Token, TokenType},
-    stringiter::StringIter,
 };
 
-pub trait CharPeekIt: Iterator<Item = char> {
-    fn peek(&mut self) -> Option<char>;
-    fn peek_peek(&mut self) -> Option<char>;
+struct LexerInput {
+    source: Vec<char>,
+    pos: usize,
+}
+
+impl LexerInput {
+    pub fn peek(&self) -> Option<char> {
+        self.source.get(self.pos).cloned()
+    }
+
+    pub fn next(&mut self) -> char {
+        self.pos += 1;
+        *self.source.get(self.pos-1).unwrap()
+    }
+}
+
+impl From<String> for LexerInput {
+    fn from(string: String) -> Self {
+        LexerInput {
+            source: string.chars().collect(),
+            pos: 0,
+        }
+    }
 }
 
 pub struct Lexer {
-    source: Box<dyn CharPeekIt>,
+    source: LexerInput
 }
 
 impl Lexer {
-    #[allow(dead_code)]
-    pub fn new_from_string(content: String) -> Lexer {
-        Lexer {
-            source: Box::new(StringIter::new(content)),
-        }
-    }
-
-    pub fn new(source: Box<dyn CharPeekIt>, _filename: &str) -> Lexer {
-        Lexer { source }
+    pub fn new(source: String, _filename: &str) -> Lexer {
+        Lexer { source: source.into() }
     }
 
     pub fn lex(&mut self) -> Vec<Token> {
@@ -41,15 +53,11 @@ impl Lexer {
     }
 
     fn matches(&mut self, c: char) -> bool {
-        if let Some(ch) = self.source.peek() {
-            let matches = ch == c;
-            if matches {
-                self.source.next();
-            }
-            matches
-        } else {
-            false
+        let matches = self.source.peek() == Some(c);
+        if matches {
+            self.source.next();
         }
+        matches
     }
 
     fn is_ident(c: char) -> bool {
@@ -84,13 +92,11 @@ impl Lexer {
     }
 
     fn next(&mut self) -> Option<Token> {
-        let c: Option<char> = self.source.next();
-
-        if None == c {
+        if None == self.source.peek() {
             return Some(Token { tt: TokenType::EOF });
         }
 
-        let c = c.unwrap();
+        let c = self.source.next();
 
         let token_type = match c {
             ' ' | '\t' | '\n' | '\r' => {
@@ -244,7 +250,7 @@ fn char() {
 
 #[test]
 fn test_lexer() {
-    let mut lexer = Lexer::new_from_string("Hello World".to_owned());
+    let mut lexer = Lexer::new("Hello World".to_owned(), "-");
 
     let tokens: Vec<_> = lexer.lex();
 
@@ -256,7 +262,7 @@ fn test_lexer() {
 
 #[test]
 fn test_lexer_string_literal() {
-    let mut lexer = Lexer::new_from_string("\"Hello\\n\\tWorld\"".to_owned());
+    let mut lexer = Lexer::new("\"Hello\\n\\tWorld\"".to_owned(), "-");
 
     let tokens: Vec<_> = lexer.lex();
 
@@ -280,7 +286,7 @@ fn test_simple() -> std::io::Result<()> {
     let content = String::from_utf8(buf)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?;
 
-    let mut lexer = Lexer::new_from_string(content);
+    let mut lexer = Lexer::new(content, "-");
 
     let tokens: Vec<_> = lexer.lex();
 
