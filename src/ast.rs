@@ -102,6 +102,7 @@ pub enum TokenType {
     Break,
     Continue,
     Sizeof,
+    Hash,
 }
 
 impl AsRef<TokenType> for TokenType {

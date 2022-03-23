@@ -166,6 +166,7 @@ impl Lexer {
             ',' => TokenType::Comma,
             ':' => TokenType::Colon,
             '?' => TokenType::Question,
+            '#' => TokenType::Hash,
             '\'' => {
                 let value = self.skip_till_match('\'');
                 if self.matches('\'') {
