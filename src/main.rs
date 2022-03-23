@@ -1,11 +1,10 @@
-use std::io::Read;
-
 mod ast;
 mod compiler;
 mod examples;
 mod intern;
 mod labels;
 mod lexer;
+mod preprocessor;
 mod parser;
 mod platform;
 mod scope;
@@ -58,28 +57,19 @@ pub struct CompilerOptions {
 pub fn compile(compiler_options: &CompilerOptions) -> std::io::Result<()> {
     println!("Reading {}", compiler_options.filename);
 
-    let mut buf = Vec::new();
+    let pp_input = lexer::lex_file(&compiler_options.filename)?;
 
-    std::fs::File::open(compiler_options.filename.clone())?.read_to_end(&mut buf)?;
-
-    let mut lexer = lexer::Lexer::new(
-        std::str::from_utf8(&buf).unwrap().to_string(),
-        &compiler_options.filename,
-    );
-
-    let parser_input = lexer.lex();
+    let pp_output = preprocessor::preprocess(pp_input, lexer::lex_file)?;
 
     if compiler_options.debug_pp {
-        for token in &parser_input {
-            if token.is_bol {
-                println!();
-            }
-            print!("{} ", token);
+        for token in &pp_output {
+            print!("{}", token);
         }
         println!();
+        return Ok(());
     }
 
-    let parser_input: parser::ParserInput = parser_input.into();
+    let parser_input= parser::ParserInput::from(pp_output);
     let parser_input = if compiler_options.debug_lex {
         parser_input.enable_debug()
     } else {

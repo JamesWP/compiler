@@ -1,3 +1,5 @@
+use std::io::Read;
+
 use crate::ast::{Token, TokenType};
 
 struct LexerInput {
@@ -54,6 +56,20 @@ impl From<String> for LexerInput {
 pub struct Lexer {
     source: LexerInput,
     is_bol: bool,
+    is_wsep: bool,
+}
+
+pub fn lex_file(filename: &str) -> std::io::Result<Vec<Token>>{
+    let mut buf = Vec::new();
+
+    std::fs::File::open(filename.clone())?.read_to_end(&mut buf)?;
+
+    let mut lexer = Lexer::new(
+        std::str::from_utf8(&buf).unwrap().to_string(),
+        filename,
+    );
+
+    Ok(lexer.lex())
 }
 
 impl Lexer {
@@ -61,6 +77,7 @@ impl Lexer {
         Lexer {
             source: source.into(),
             is_bol: true,
+            is_wsep: false,
         }
     }
 
@@ -126,11 +143,13 @@ impl Lexer {
 
         let token_start = self.source.pos();
         let is_bol = self.is_bol;
+        let is_wsep = self.is_wsep;
 
         let c = self.source.next();
 
         let token_type = match c {
             ' ' | '\t' | '\r' => {
+                self.is_wsep = true;
                 return None;
             }
             '\n' => {
@@ -271,6 +290,7 @@ impl Lexer {
         };
 
         self.is_bol = false;
+        self.is_wsep = false;
 
         let token_end = self.source.pos();
 
@@ -279,6 +299,7 @@ impl Lexer {
             token_start,
             token_end,
             is_bol,
+            is_wsep,
             token_text: self.source.text(token_start.2, token_end.2),
         });
     }

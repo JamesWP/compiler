@@ -8,6 +8,7 @@ pub struct Token {
     pub token_start: (usize, usize, usize),
     pub token_end: (usize, usize, usize),
     pub is_bol: bool,
+    pub is_wsep: bool,
     pub token_text: String,
 }
 
@@ -18,6 +19,21 @@ impl Default for Token {
             token_start: (0, 0, 0),
             token_end: (0, 0, 0),
             is_bol: true,
+            is_wsep: true,
+            token_text: String::new(),
+        }
+    }
+}
+
+#[cfg(test)]
+impl From<TokenType> for Token {
+    fn from(tt: TokenType) -> Self {
+        Token {
+            tt,
+            token_start: (0, 0, 0),
+            token_end: (0, 0, 0),
+            is_bol: true,
+            is_wsep: true,
             token_text: String::new(),
         }
     }
@@ -25,7 +41,18 @@ impl Default for Token {
 
 impl Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.token_text)
+        if self.is_bol {
+            f.write_str("\n")?;
+            for _ in 0..self.token_start.1 {
+                f.write_str(" ")?
+            }
+        } else if self.is_wsep {
+            f.write_str(" ")?;
+        }
+
+        f.write_str(&self.token_text)?;
+
+        Ok(())
     }
 }
 
