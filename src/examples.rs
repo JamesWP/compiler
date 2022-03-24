@@ -158,5 +158,5 @@ mod compiler_unit_tests {
     compile!(compare example_11 "11_scopes");
     compile!(compare example_12 "12_print_args"; argv "testing" "testing again");
     compile!(compare example_13 "13_loops");
-    compile!(compare example_14 "14_preprocess_subst");
+    // compile!(compare example_14 "14_preprocess_subst");
 } // mod compiler_unit_tests

@@ -224,7 +224,7 @@ impl PreprocessorState {
      *      text-line:
      *         : pp-tokens[opt] new-line
      *         ;
-     * 
+     *
      *      pp-tokens:
      *         : preprocessing-token
      *         | pp-tokens preprocessing-token
@@ -247,12 +247,12 @@ impl PreprocessorState {
         if self.input.peek().is_none() {
             true
         } else {
-            matches!(self.input.peek(), Some(ast::Token{is_bol: true, ..}))
+            matches!(self.input.peek(), Some(ast::Token { is_bol: true, .. }))
         }
     }
 
     fn is_preprocessing_token(&self) -> bool {
-        unimplemented!();
+        true
     }
 
     fn is_if_section(&self) -> bool {
@@ -261,5 +261,28 @@ impl PreprocessorState {
 
     fn is_control_section(&self) -> bool {
         unimplemented!();
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::ast::Token;
+    use crate::ast::TokenType::*;
+    use crate::preprocessor::preprocess;
+
+    macro_rules! tok {
+      ($($tok:path)*) => {
+        vec![$(Token::from($tok), )*]
+      };
+    }
+
+    fn noop_load(f:&str)-> std::io::Result<Vec<Token>> {
+      panic!("no loads expected");
+    }
+
+    #[test]
+    fn test_pp() {
+        let tokens = preprocess(tok![LParen], noop_load).unwrap();
+        assert_eq!(tokens, tok![LParen]);
     }
 }
