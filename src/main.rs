@@ -4,9 +4,9 @@ mod examples;
 mod intern;
 mod labels;
 mod lexer;
-mod preprocessor;
 mod parser;
 mod platform;
+mod preprocessor;
 mod scope;
 
 fn main() -> std::io::Result<()> {
@@ -69,7 +69,7 @@ pub fn compile(compiler_options: &CompilerOptions) -> std::io::Result<()> {
         return Ok(());
     }
 
-    let parser_input= parser::ParserInput::from(pp_output);
+    let parser_input = parser::ParserInput::from(pp_output);
     let parser_input = if compiler_options.debug_lex {
         parser_input.enable_debug()
     } else {

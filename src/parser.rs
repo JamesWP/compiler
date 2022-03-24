@@ -667,10 +667,7 @@ fn test_parse_translation_unit() {
         ast::TokenType::RBrace,
     ];
 
-    let input: Vec<_> = input
-        .into_iter()
-        .map(ast::Token::from)
-        .collect();
+    let input: Vec<_> = input.into_iter().map(ast::Token::from).collect();
 
     let parse_result = ParserState::new(input.into()).parse_translation_unit();
 

@@ -59,15 +59,12 @@ pub struct Lexer {
     is_wsep: bool,
 }
 
-pub fn lex_file(filename: &str) -> std::io::Result<Vec<Token>>{
+pub fn lex_file(filename: &str) -> std::io::Result<Vec<Token>> {
     let mut buf = Vec::new();
 
     std::fs::File::open(filename.clone())?.read_to_end(&mut buf)?;
 
-    let mut lexer = Lexer::new(
-        std::str::from_utf8(&buf).unwrap().to_string(),
-        filename,
-    );
+    let mut lexer = Lexer::new(std::str::from_utf8(&buf).unwrap().to_string(), filename);
 
     Ok(lexer.lex())
 }
