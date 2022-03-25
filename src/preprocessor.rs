@@ -269,6 +269,7 @@ mod test {
     use crate::ast::Token;
     use crate::ast::TokenType::*;
     use crate::preprocessor::preprocess;
+    use crate::lexer::lex_string;
 
     macro_rules! tok {
       ($($tok:path)*) => {
@@ -276,13 +277,20 @@ mod test {
       };
     }
 
-    fn noop_load(f:&str)-> std::io::Result<Vec<Token>> {
-      panic!("no loads expected");
+    fn noop_load(_: &str) -> std::io::Result<Vec<Token>> {
+        panic!("no loads expected");
     }
 
     #[test]
     fn test_pp() {
         let tokens = preprocess(tok![LParen], noop_load).unwrap();
         assert_eq!(tokens, tok![LParen]);
+    }
+
+    #[test]
+    fn test_define() {
+        let tokens = lex_string("{".to_string(), "-").unwrap();
+        let tokens = preprocess(tokens, noop_load).unwrap();
+        assert_eq!(tokens, tok![LBrace]);
     }
 }

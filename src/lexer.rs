@@ -64,7 +64,11 @@ pub fn lex_file(filename: &str) -> std::io::Result<Vec<Token>> {
 
     std::fs::File::open(filename.clone())?.read_to_end(&mut buf)?;
 
-    let mut lexer = Lexer::new(std::str::from_utf8(&buf).unwrap().to_string(), filename);
+    lex_string(std::str::from_utf8(&buf).unwrap().to_string(), filename)
+}
+
+pub fn lex_string(s: String, filename: &str) -> std::io::Result<Vec<Token>> {
+    let mut lexer = Lexer::new(s, filename);
 
     Ok(lexer.lex())
 }
