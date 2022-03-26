@@ -1,18 +1,35 @@
-use crate::ast;
+use crate::ast::{self, TokenType, Token};
 
 struct PreprocessorInput {
     source: Vec<ast::Token>,
     pos: usize,
 }
 
+struct PreprocessorDefines {
+
+}
+
 struct PreprocessorState {
     input: PreprocessorInput,
     output: Vec<ast::Token>,
+    defines: PreprocessorDefines,
 }
 
 impl PreprocessorState {
     fn emit(&mut self, token: ast::Token) {
         self.output.push(token);
+    }
+}
+
+impl Default for PreprocessorDefines {
+    fn default() -> Self {
+        Self {  }
+    }
+}
+
+impl PreprocessorDefines {
+    fn add_macro(&mut self, name: String, replacement_list: Vec<ast::Token>) -> std::io::Result<()> {
+        unimplemented!()
     }
 }
 
@@ -53,6 +70,7 @@ impl From<Vec<ast::Token>> for PreprocessorState {
         Self {
             input: tokens.into(),
             output: Default::default(),
+            defines: Default::default(),
         }
     }
 }
@@ -205,7 +223,7 @@ impl PreprocessorState {
                     unimplemented!();
                 } else if self.is_control_section() {
                     // must be 'control-section'
-                    unimplemented!();
+                    self.parse_control_line()?;
                 } else {
                     // must be 'non-directive'
                     unimplemented!();
@@ -218,6 +236,60 @@ impl PreprocessorState {
         }
 
         Ok(())
+    }
+
+    /**
+     *  control-line:
+     *      : # include pp-tokens new-line
+     *      | # define identifier replacement-list new-line
+     *      | # define identifier lparen identifier-list[opt] ) replacement-list new-line
+     *      | # define identifier lparen ... ) replacement-list new-line
+     *      | # define identifier lparen identifier-list , ... ) replacement-list new-line
+     *      | # undef identifier new-line
+     *      | # line pp-tokens new-line
+     *      | # error pp-tokens[opt] new-line
+     *      | # pragma pp-tokens[opt] new-line
+     *      | # new-line
+     *      ;
+     */
+    fn parse_control_line(&mut self) -> std::io::Result<()> {
+        if self.is_new_line() {
+            return Ok(())
+        }
+
+        let ident = match self.input.peek_type() {
+            Some(ast::TokenType::Identifier(ident)) => ident.to_lowercase(),
+            _ => unimplemented!("unexpected non identifier following #")
+        };
+
+        self.input.next();
+
+        match ident.as_str() {
+            "include" => unimplemented!(),
+            "define" => {
+                let macro_name = match self.input.next() {
+                    Some(Token{ tt: TokenType::Identifier(name), .. }) => name,
+                    _ => unimplemented!("macro names must be identifiers")
+                };
+                
+                match self.input.peek_type() {
+                    Some(TokenType::LParen) => {
+                        unimplemented!("function like macro")
+                    },
+                    _ => {
+                        let replacement_list = self.parse_replacement_list()?;
+                        self.defines.add_macro(macro_name, replacement_list)?;
+
+                        Ok(())
+                    }
+                }
+            },
+            "undef" => unimplemented!(),
+            "line" => unimplemented!(),
+            "error" => unimplemented!(),
+            "pragma" => unimplemented!(),
+            _ => unimplemented!("unknown identifier following #")
+        }
     }
 
     /**
@@ -243,6 +315,20 @@ impl PreprocessorState {
         Ok(())
     }
 
+    /**
+     *      replacement-list:
+     *         : pp-tokens[opt]
+     *         ;
+     *
+     *      pp-tokens:
+     *         : preprocessing-token
+     *         | pp-tokens preprocessing-token
+     *         ;
+     */
+    fn parse_replacement_list(&mut self) -> std::io::Result<Vec<Token>> {
+        unimplemented!();
+    }
+
     fn is_new_line(&self) -> bool {
         if self.input.peek().is_none() {
             true
@@ -255,42 +341,102 @@ impl PreprocessorState {
         true
     }
 
+    /**
+     *
+     *  # if ..  
+     *  # ifdef ..  
+     *  # ifndef ..
+     */
     fn is_if_section(&self) -> bool {
-        unimplemented!();
+        if self.is_new_line() {
+            return false;
+        }
+
+        match self.input.peek_type() {
+            Some(ast::TokenType::Identifier(ident)) => {
+                let ident = ident.to_lowercase();
+                ident == "if" || ident == "ifdef" || ident == "ifndef"
+            }
+            _ => false,
+        }
     }
 
+    /**
+     *  # include ..
+     *  # define ..
+     *  # undef ..
+     *  # line ..
+     *  # error ..
+     *  # pragma ..
+     *  # new-line
+     */
     fn is_control_section(&self) -> bool {
-        unimplemented!();
+        if self.is_new_line() {
+            return true;
+        }
+
+        match self.input.peek_type() {
+            Some(ast::TokenType::Identifier(ident)) => {
+                let ident = ident.to_lowercase();
+                ident == "include"
+                    || ident == "define"
+                    || ident == "undef"
+                    || ident == "line"
+                    || ident == "error"
+                    || ident == "pragma"
+            }
+            _ => false,
+        }
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::ast::Token;
     use crate::ast::TokenType::*;
-    use crate::preprocessor::preprocess;
+    use crate::ast::{Token, TokenType};
     use crate::lexer::lex_string;
-
-    macro_rules! tok {
-      ($($tok:path)*) => {
-        vec![$(Token::from($tok), )*]
-      };
-    }
+    use crate::preprocessor::preprocess;
 
     fn noop_load(_: &str) -> std::io::Result<Vec<Token>> {
         panic!("no loads expected");
     }
 
+    // Token list equality
+    macro_rules! token_eq {
+     ($lhs:expr, $($tok:expr)*) => {
+         assert_eq!($lhs, vec![$($tok, )*]);
+     };
+    }
+
+    macro_rules! tok {
+        (id $ident:ident) => {
+            TokenType::Identifier(stringify!($ident).to_owned())
+        };
+    }
+
+    fn test_preprocessor(input: &str) -> Vec<TokenType> {
+        let tokens = lex_string(String::from(input), "-").unwrap();
+        let tokens = preprocess(tokens, noop_load).unwrap();
+
+        tokens.into_iter().map(|t| t.tt).collect()
+    }
+
     #[test]
     fn test_pp() {
-        let tokens = preprocess(tok![LParen], noop_load).unwrap();
-        assert_eq!(tokens, tok![LParen]);
+        let tokens = test_preprocessor("(");
+        token_eq!(tokens, LParen);
+    }
+
+    #[test]
+    fn test_pp2() {
+        let tokens = test_preprocessor("{{}}");
+        token_eq!(tokens, LBrace LBrace RBrace RBrace);
     }
 
     #[test]
     fn test_define() {
-        let tokens = lex_string("{".to_string(), "-").unwrap();
-        let tokens = preprocess(tokens, noop_load).unwrap();
-        assert_eq!(tokens, tok![LBrace]);
+        let tokens = test_preprocessor("#define A B\nA A");
+
+        token_eq!(tokens, tok!(id A) tok!(id A));
     }
 }
