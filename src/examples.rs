@@ -159,4 +159,5 @@ mod compiler_unit_tests {
     compile!(compare example_12 "12_print_args"; argv "testing" "testing again");
     compile!(compare example_13 "13_loops");
     compile!(compare example_14 "14_preprocess_subst");
+    compile!(compare example_15 "15_aoc_2015_1");
 } // mod compiler_unit_tests
