@@ -303,6 +303,7 @@ impl Lexer {
             is_bol,
             is_wsep,
             token_text: self.source.text(token_start.2, token_end.2),
+            hideset: Default::default(),
         });
     }
 }

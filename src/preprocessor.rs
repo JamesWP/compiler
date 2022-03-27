@@ -1,71 +1,117 @@
-use crate::ast::{self, TokenType, Token};
+use std::collections::{HashMap, VecDeque};
 
-struct PreprocessorInput {
-    source: Vec<ast::Token>,
+use crate::ast;
+
+struct Input {
+    source: VecDeque<ast::Token>,
     pos: usize,
 }
 
-struct PreprocessorDefines {
-
+enum Macro {
+    ObjectLike {
+        replacement_list: Vec<ast::Token>,
+    },
+    FunctionLike {
+        arguments: Vec<String>,
+        replacement_list: Vec<ast::Token>,
+    },
 }
 
-struct PreprocessorState {
-    input: PreprocessorInput,
+struct Defines {
+    macros: HashMap<String, Macro>,
+}
+
+struct State {
+    input: Input,
     output: Vec<ast::Token>,
-    defines: PreprocessorDefines,
+    defines: Defines,
 }
 
-impl PreprocessorState {
-    fn emit(&mut self, token: ast::Token) {
-        self.output.push(token);
-    }
-}
-
-impl Default for PreprocessorDefines {
+impl Default for Defines {
     fn default() -> Self {
-        Self {  }
-    }
-}
-
-impl PreprocessorDefines {
-    fn add_macro(&mut self, name: String, replacement_list: Vec<ast::Token>) -> std::io::Result<()> {
-        unimplemented!()
-    }
-}
-
-impl PreprocessorInput {
-    fn next(&mut self) -> Option<ast::Token> {
-        if self.pos < self.source.len() {
-            self.pos += 1;
-            Some(self.source[self.pos - 1].clone())
-        } else {
-            None
+        Self {
+            macros: Default::default(),
         }
+    }
+}
+
+impl Defines {
+    fn add_macro(
+        &mut self,
+        name: String,
+        replacement_list: Vec<ast::Token>,
+    ) -> std::io::Result<()> {
+        use std::collections::hash_map::Entry::*;
+        match self.macros.entry(name) {
+            Occupied(_) => todo!("handle macro redefinition"),
+            Vacant(v) => {
+                v.insert(Macro::ObjectLike {
+                    replacement_list: replacement_list,
+                });
+                Ok(())
+            }
+        }
+    }
+
+    fn is_object_like_macro(&self, token: &ast::Token) -> bool {
+        match token.tt {
+            ast::TokenType::Identifier(ref name) => self.macros.contains_key(name),
+            _ => false,
+        }
+    }
+
+    fn get_object_like_macro(&self, token: &ast::Token) -> Option<(String, &Macro)> {
+        let ident_name = match token.tt {
+            ast::TokenType::Identifier(ref name) => name,
+            _ => {
+                // Token isn't an identifier
+                return None;
+            }
+        };
+
+        let mcro = self.macros.get(ident_name)?;
+
+        if let Some(hideset) = &token.hideset {
+            if hideset.contains(ident_name) {
+                // Macro exists but is hiden for this token
+                return None;
+            } 
+        }
+
+        Some((ident_name.to_owned(), mcro))
+    }
+}
+
+impl Input {
+    fn next(&mut self) -> Option<ast::Token> {
+        self.source.pop_front()
     }
 
     fn peek(&self) -> Option<ast::Token> {
-        if self.pos < self.source.len() {
-            Some(self.source[self.pos].clone())
-        } else {
-            None
-        }
+        self.source.front().cloned()
     }
 
     fn peek_type(&self) -> Option<ast::TokenType> {
         self.peek().map(|t| t.tt)
     }
+
+    fn unget(&mut self, items: Vec<ast::Token>) {
+       for item in items.into_iter().rev() {
+           self.source.push_front(item);
+       }
+    }
 }
 
-impl From<Vec<ast::Token>> for PreprocessorInput {
+impl From<Vec<ast::Token>> for Input {
     fn from(tokens: Vec<ast::Token>) -> Self {
         Self {
-            source: tokens,
+            source: tokens.into(),
             pos: 0,
         }
     }
 }
 
-impl From<Vec<ast::Token>> for PreprocessorState {
+impl From<Vec<ast::Token>> for State {
     fn from(tokens: Vec<ast::Token>) -> Self {
         Self {
             input: tokens.into(),
@@ -75,7 +121,7 @@ impl From<Vec<ast::Token>> for PreprocessorState {
     }
 }
 
-impl Into<Vec<ast::Token>> for PreprocessorState {
+impl Into<Vec<ast::Token>> for State {
     fn into(self) -> Vec<ast::Token> {
         self.output
     }
@@ -85,7 +131,7 @@ pub fn preprocess(
     tokens: Vec<ast::Token>,
     _lex_file: fn(&str) -> std::io::Result<Vec<ast::Token>>,
 ) -> std::io::Result<Vec<ast::Token>> {
-    let mut state = PreprocessorState::from(tokens);
+    let mut state = State::from(tokens);
 
     state.parse_preprocessing_file()?;
 
@@ -177,8 +223,7 @@ pub fn preprocess(
  *         ;
  *
  */
-
-impl PreprocessorState {
+impl State {
     /**
      *      preprocessing-file:
      *         : group[opt]
@@ -254,12 +299,12 @@ impl PreprocessorState {
      */
     fn parse_control_line(&mut self) -> std::io::Result<()> {
         if self.is_new_line() {
-            return Ok(())
+            return Ok(());
         }
 
         let ident = match self.input.peek_type() {
             Some(ast::TokenType::Identifier(ident)) => ident.to_lowercase(),
-            _ => unimplemented!("unexpected non identifier following #")
+            _ => unimplemented!("unexpected non identifier following #"),
         };
 
         self.input.next();
@@ -268,14 +313,23 @@ impl PreprocessorState {
             "include" => unimplemented!(),
             "define" => {
                 let macro_name = match self.input.next() {
-                    Some(Token{ tt: TokenType::Identifier(name), .. }) => name,
-                    _ => unimplemented!("macro names must be identifiers")
+                    Some(ast::Token {
+                        tt: ast::TokenType::Identifier(name),
+                        ..
+                    }) => name,
+                    _ => unimplemented!("macro names must be identifiers"),
                 };
-                
+
                 match self.input.peek_type() {
-                    Some(TokenType::LParen) => {
+                    /*  # define identifier lparen identifier-list[opt] ) replacement-list new-line
+                     *  # define identifier lparen ... ) replacement-list new-line
+                     *  # define identifier lparen identifier-list , ... ) replacement-list new-line
+                     */
+                    Some(ast::TokenType::LParen) => {
                         unimplemented!("function like macro")
-                    },
+                    }
+                    /* # define identifier replacement-list new-line
+                     */
                     _ => {
                         let replacement_list = self.parse_replacement_list()?;
                         self.defines.add_macro(macro_name, replacement_list)?;
@@ -283,12 +337,12 @@ impl PreprocessorState {
                         Ok(())
                     }
                 }
-            },
+            }
             "undef" => unimplemented!(),
             "line" => unimplemented!(),
             "error" => unimplemented!(),
             "pragma" => unimplemented!(),
-            _ => unimplemented!("unknown identifier following #")
+            _ => unimplemented!("unknown identifier following #"),
         }
     }
 
@@ -325,8 +379,18 @@ impl PreprocessorState {
      *         | pp-tokens preprocessing-token
      *         ;
      */
-    fn parse_replacement_list(&mut self) -> std::io::Result<Vec<Token>> {
-        unimplemented!();
+    fn parse_replacement_list(&mut self) -> std::io::Result<Vec<ast::Token>> {
+        let mut tokens = Vec::new();
+        while self.is_preprocessing_token() {
+            let token = self.input.next().unwrap();
+            tokens.push(token);
+
+            if self.is_new_line() {
+                break;
+            }
+        }
+
+        Ok(tokens)
     }
 
     fn is_new_line(&self) -> bool {
@@ -390,6 +454,37 @@ impl PreprocessorState {
     }
 }
 
+/**
+ * contains the non parsing functions
+ */
+impl State {
+    /**
+     * expand and emit
+     */
+    fn emit(&mut self, token: ast::Token) {
+        if let Some((name, mcro)) = self.defines.get_object_like_macro(&token) {
+            match mcro {
+                Macro::ObjectLike { replacement_list } => {
+                    let replacement_list = replacement_list.iter().map(|t|{
+                        let mut new_token = t.clone();
+                        new_token.token_start = token.token_start;
+                        new_token.token_end = token.token_end;
+                        new_token.is_bol = false; // TODO: consider options
+                        new_token.is_wsep = true; // TODO: consider options
+                        new_token.pp_hide(name.clone());
+                        new_token
+                    });
+
+                    self.input.unget(replacement_list.collect());
+                },
+                Macro::FunctionLike { arguments, replacement_list } => todo!(),
+            }
+        } else {
+            self.output.push(token);
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::ast::TokenType::*;
@@ -437,6 +532,6 @@ mod test {
     fn test_define() {
         let tokens = test_preprocessor("#define A B\nA A");
 
-        token_eq!(tokens, tok!(id A) tok!(id A));
+        token_eq!(tokens, tok!(id B) tok!(id B));
     }
 }

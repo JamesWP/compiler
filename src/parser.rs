@@ -172,6 +172,8 @@ impl ParserState {
             let statement = self.parse_compound_statement()?;
             self.scope.end_scope()?;
             Ok(statement)
+        } else if self.matches(ast::TokenType::Semicolon) {
+            Ok(ast::Statement::NoopStatement)
         } else {
             let expr = self.parse_expression()?;
             self.input.expect(ast::TokenType::Semicolon)?;

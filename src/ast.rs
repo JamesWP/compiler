@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{collections::HashSet, fmt::Display};
 
 use crate::scope::SharedOptionStackLocation;
 
@@ -10,6 +10,7 @@ pub struct Token {
     pub is_bol: bool,
     pub is_wsep: bool,
     pub token_text: String,
+    pub hideset: Option<HashSet<String>>,
 }
 
 impl Default for Token {
@@ -21,6 +22,7 @@ impl Default for Token {
             is_bol: true,
             is_wsep: true,
             token_text: String::new(),
+            hideset: Default::default(),
         }
     }
 }
@@ -35,6 +37,7 @@ impl From<TokenType> for Token {
             is_bol: true,
             is_wsep: true,
             token_text: String::new(),
+            hideset: Default::default(),
         }
     }
 }
@@ -189,6 +192,7 @@ pub enum Statement {
     DeclarationStatement(DeclarationStatement),
     CompoundStatement(Vec<Statement>),
     Expression(Expression),
+    NoopStatement,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -337,6 +341,7 @@ impl Statement {
         // TODO: when statements can be nested, this needs to visit all of them!
         match self {
             // These statements can't contain any other statements
+            Statement::NoopStatement => {}
             Statement::JumpStatement(_) => {}
             Statement::DeclarationStatement(_) => {}
             Statement::Expression(_) => {}
@@ -602,5 +607,11 @@ impl Expression {
             expr_type,
             node: ExpressionNode::Conditional(condition, expression_if_true, expression_if_false),
         }
+    }
+}
+
+impl Token {
+    pub fn pp_hide(&mut self, name: String) {
+        self.hideset.get_or_insert_with(HashSet::default).insert(name);
     }
 }

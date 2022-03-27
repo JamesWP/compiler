@@ -1,7 +1,8 @@
 # define find replace
 # define a b
 # define true false
-
+# define assert_that if ( (
+# define is_true ) == true ) { return 1; } 
 int main(int argc, const char* argv[]) {
   int replace = 0;
 
@@ -9,14 +10,11 @@ int main(int argc, const char* argv[]) {
 
   int false = 0;
 
-  if (replace == true){
-    return 1;
-  }
+  assert_that replace is_true;
+
   int a = 123;
 
-  if (b != a) {
-    return 2;
-  }
+  assert_that b == a is_true;
 
   return 0;
 }

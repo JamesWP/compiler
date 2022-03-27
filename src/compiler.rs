@@ -343,6 +343,7 @@ impl CompilationState {
 
     fn compile_statement(&mut self, statement: &ast::Statement) -> std::io::Result<()> {
         match statement {
+            ast::Statement::NoopStatement => { }
             ast::Statement::JumpStatement(js) => {
                 self.debug_statement(statement)?;
                 // TODO: read information about all registers which need popping
