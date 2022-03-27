@@ -53,13 +53,6 @@ impl Defines {
         }
     }
 
-    fn is_object_like_macro(&self, token: &ast::Token) -> bool {
-        match token.tt {
-            ast::TokenType::Identifier(ref name) => self.macros.contains_key(name),
-            _ => false,
-        }
-    }
-
     fn get_object_like_macro(&self, token: &ast::Token) -> Option<(String, &Macro)> {
         let ident_name = match token.tt {
             ast::TokenType::Identifier(ref name) => name,
@@ -471,6 +464,7 @@ impl State {
                         new_token.token_end = token.token_end;
                         new_token.is_bol = false; // TODO: consider options
                         new_token.is_wsep = true; // TODO: consider options
+                        new_token.hideset = token.hideset.clone();
                         new_token.pp_hide(name.clone());
                         new_token
                     });
@@ -533,5 +527,12 @@ mod test {
         let tokens = test_preprocessor("#define A B\nA A");
 
         token_eq!(tokens, tok!(id B) tok!(id B));
+    }
+
+    #[test]
+    fn test_define_circle() {
+        let tokens = test_preprocessor("#define A B\n#define B A\nA B");
+
+        token_eq!(tokens, tok!(id A) tok!(id B));
     }
 }
