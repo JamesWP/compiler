@@ -359,7 +359,9 @@ impl State {
                 Ok(())
             },
             "line" => unimplemented!(),
-            "error" => unimplemented!(),
+            "error" => {
+                todo!("# error encountered while preprocessing, enhance errors");
+            },
             "pragma" => unimplemented!(),
             _ => unimplemented!("unknown identifier following #"),
         }
