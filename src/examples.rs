@@ -54,6 +54,8 @@ mod compiler_unit_tests {
         go(
             "NATIVE CC",
             std::process::Command::new("gcc")
+                .arg("-I")
+                .arg(".")
                 .arg("-c")
                 .arg(source_file)
                 .arg("-o")
@@ -117,6 +119,7 @@ mod compiler_unit_tests {
             pub fn $program() {
                 println!("=============================");
                 println!("======== Example {:02} =========", stringify!($program));
+                println!("PWD: {}", std::env::current_dir().unwrap().display());
 
                 let ref_output = compile!(do_run "NATIVE" "ref" ref_compile (stringify!($program)) $(file $filename)* $(; $($arg)+)?);
                 let test_output = compile!(do_run "TESTING" "test" test_compile (stringify!($program)) $(file $filename)* $(; $($arg)+)?);
@@ -161,4 +164,5 @@ mod compiler_unit_tests {
     compile!(compare example_14 "14_preprocess_subst");
     compile!(compare example_15 "15_aoc_2015_1");
     compile!(compare example_16 "16_strlen");
+    compile!(compare example_17 "17_pp_include");
 } // mod compiler_unit_tests

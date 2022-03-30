@@ -25,6 +25,7 @@ struct State {
     input: Input,
     output: Vec<ast::Token>,
     defines: Defines,
+    lex_file_fn: fn(&str) -> std::io::Result<Vec<ast::Token>>,
 }
 
 impl Default for Defines {
@@ -114,16 +115,6 @@ impl From<Vec<ast::Token>> for Input {
     }
 }
 
-impl From<Vec<ast::Token>> for State {
-    fn from(tokens: Vec<ast::Token>) -> Self {
-        Self {
-            input: tokens.into(),
-            output: Default::default(),
-            defines: Default::default(),
-        }
-    }
-}
-
 impl Into<Vec<ast::Token>> for State {
     fn into(self) -> Vec<ast::Token> {
         self.output
@@ -132,9 +123,9 @@ impl Into<Vec<ast::Token>> for State {
 
 pub fn preprocess(
     tokens: Vec<ast::Token>,
-    _lex_file: fn(&str) -> std::io::Result<Vec<ast::Token>>,
+    lex_file: fn(&str) -> std::io::Result<Vec<ast::Token>>,
 ) -> std::io::Result<Vec<ast::Token>> {
-    let mut state = State::from(tokens);
+    let mut state = State::new(tokens, lex_file);
 
     state.parse_preprocessing_file()?;
 
@@ -313,7 +304,30 @@ impl State {
         self.input.next();
 
         match ident.as_str() {
-            "include" => unimplemented!(),
+            "include" => {
+                let include_path = match self.input.next() {
+                    Some(ast::Token{tt: ast::TokenType::StringLiteral(include_name), ..}) => {
+                        include_name
+                    },
+                    Some(ast::Token{tt: ast::TokenType::LessThan, ..}) => {
+                        match self.input.next() {
+                            Some(ast::Token{tt: ast::TokenType::Identifier(include_name), ..}) => {
+                                include_name
+                            },
+                            _ => {
+                                unimplemented!("unexpected token after #include '<'  expected 'path' '>'");
+                            }
+                        }
+                    },
+                    _ => {
+                        unimplemented!("unexpected token after #include expected '<' 'path' '>' or '\"path\"'");
+                    }
+                };
+
+                self.include_file(&include_path)?;
+
+                Ok(())
+            },
             "define" => {
                 let macro_name = match self.input.next() {
                     Some(ast::Token {
@@ -479,6 +493,14 @@ impl State {
  * contains the non parsing functions
  */
 impl State {
+    fn new(tokens: Vec<ast::Token>, lex_file: fn(&str) -> std::io::Result<Vec<ast::Token>>) -> Self {
+        Self {
+            input: tokens.into(),
+            output: Default::default(),
+            defines: Default::default(),
+            lex_file_fn: lex_file
+        }
+    }
     /**
      * expand and emit
      */
@@ -507,6 +529,14 @@ impl State {
         } else {
             self.output.push(token);
         }
+    }
+
+    fn include_file(&mut self, include_path: &str) -> std::io::Result<()> {
+        let result = (self.lex_file_fn)(include_path)?;
+
+        self.input.unget(result);
+
+        Ok(())
     }
 }
 
