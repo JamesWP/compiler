@@ -73,6 +73,16 @@ impl Defines {
 
         Some((ident_name.to_owned(), mcro))
     }
+
+    fn remove_macro(&mut self, macro_name: String) -> std::io::Result<()>{
+        use std::collections::hash_map::Entry::*;
+        match self.macros.entry(macro_name) {
+            Occupied(entry) => entry.remove(),
+            Vacant(_) => todo!("check if you can remove a non existent macro"),
+        };
+
+        Ok(())
+    }
 }
 
 impl Input {
@@ -331,9 +341,27 @@ impl State {
                     }
                 }
             }
-            "undef" => unimplemented!(),
+            "undef" => {
+                let macro_name = match self.input.next() {
+                    Some(ast::Token {
+                        tt: ast::TokenType::Identifier(name),
+                        ..
+                    }) => name,
+                    _ => unimplemented!("macro names must be identifiers"),
+                };
+
+                if !self.is_new_line() {
+                    unimplemented!("undef directive has more tokens, gcc accepts this");
+                }
+
+                self.defines.remove_macro(macro_name)?;
+
+                Ok(())
+            },
             "line" => unimplemented!(),
-            "error" => unimplemented!(),
+            "error" => {
+                todo!("# error encountered while preprocessing, enhance errors");
+            },
             "pragma" => unimplemented!(),
             _ => unimplemented!("unknown identifier following #"),
         }

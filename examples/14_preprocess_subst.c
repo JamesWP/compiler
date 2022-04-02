@@ -5,6 +5,9 @@
 # define assert_that if ( (
 # define is_true ) == true ) { return 1; } 
 
+# define b c
+# undef b
+
 int main(int argc, const char* argv[]) {
   int replace = 0;
 
