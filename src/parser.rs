@@ -1,7 +1,7 @@
 use std::{cell::RefCell, convert::TryInto, rc::Rc};
 
 use crate::{
-    ast::{self, TypeQualifier},
+    ast::{self, IntSize, TypeQualifier},
     scope::Scope,
 };
 
@@ -67,7 +67,7 @@ impl From<Vec<ast::Token>> for ParserInput {
 fn is_type_decl(token: Option<ast::TokenType>) -> bool {
     use crate::ast::TokenType::*;
     match token {
-        Some(Int) | Some(Char) | Some(Const) => true,
+        Some(Int) | Some(Char) | Some(Const) | Some(Long) => true,
         _ => false,
     }
 }
@@ -380,15 +380,21 @@ impl ParserState {
                 self.input.pop();
                 (
                     ast::Value::Literal(ast::LiteralValue::Int32 { 0: v as i32 }),
-                    ast::TypeDefinition::INT(TypeQualifier::from(true)),
+                    ast::TypeDefinition::INT {
+                        size: ast::IntSize::Four,
+                        qualifier: TypeQualifier::from(true),
+                    },
                 )
             }
             Some(ast::TokenType::StringLiteral(v)) => {
                 self.input.pop();
                 (
                     ast::Value::Literal(ast::LiteralValue::StringLiteral(v)),
-                    ast::TypeDefinition::CHAR(TypeQualifier::from(true))
-                        .as_pointer_to(TypeQualifier::from(false)),
+                    ast::TypeDefinition::INT {
+                        size: ast::IntSize::One,
+                        qualifier: TypeQualifier::from(true),
+                    }
+                    .as_pointer_to(TypeQualifier::from(false)),
                 )
             }
             Some(ast::TokenType::CharLiteral(v)) => {
@@ -399,7 +405,10 @@ impl ParserState {
                             .next()
                             .expect("char literal needs at least one char"),
                     )),
-                    ast::TypeDefinition::INT(TypeQualifier::from(true)), // This is strange, apparently in C sizeof('a') == 4!
+                    ast::TypeDefinition::INT {
+                        size: ast::IntSize::Four,
+                        qualifier: TypeQualifier::from(true),
+                    }, // This is strange, apparently in C sizeof('a') == 4!
                 )
             }
             Some(ast::TokenType::Identifier(v)) => {
@@ -430,7 +439,10 @@ impl ParserState {
                     ast::Value::Literal(ast::LiteralValue::Int32(
                         expr.expr_type.size().try_into().unwrap(),
                     )),
-                    ast::TypeDefinition::INT(true.into()),
+                    ast::TypeDefinition::INT {
+                        size: ast::IntSize::Eight,
+                        qualifier: ast::TypeQualifier::from(true),
+                    },
                 )
             }
             _ => unimplemented!(
@@ -525,10 +537,14 @@ impl ParserState {
     fn parse_type_specifier(&mut self) -> ParseResult<ast::TypeDefinition> {
         let mut type_word = None;
         let mut is_const = false;
-
+        let mut longs = 0;
         loop {
             if self.matches(ast::TokenType::Const) {
                 is_const = true;
+                continue;
+            }
+            if self.matches(ast::TokenType::Long) {
+                longs += 1;
                 continue;
             }
             let new_type = if self.matches(ast::TokenType::Char) {
@@ -547,8 +563,18 @@ impl ParserState {
         }
 
         match type_word {
-            Some(ast::TokenType::Int) => Ok(ast::TypeDefinition::INT(is_const.into())),
-            Some(ast::TokenType::Char) => Ok(ast::TypeDefinition::CHAR(is_const.into())),
+            Some(ast::TokenType::Int) => Ok(ast::TypeDefinition::INT {
+                size: match longs {
+                    1 | 0 => ast::IntSize::Four,
+                    2 => ast::IntSize::Eight,
+                    _ => unimplemented!(),
+                },
+                qualifier: ast::TypeQualifier::from(is_const),
+            }),
+            Some(ast::TokenType::Char) => Ok(ast::TypeDefinition::INT {
+                size: ast::IntSize::One,
+                qualifier: ast::TypeQualifier::from(is_const),
+            }),
             None => Ok(ast::TypeDefinition::default()),
             Some(_) => unimplemented!(),
         }

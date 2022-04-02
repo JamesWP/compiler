@@ -1,4 +1,4 @@
-use std::{collections::HashSet, fmt::Display};
+use std::{cmp::max, collections::HashSet, fmt::Display};
 
 use crate::scope::SharedOptionStackLocation;
 
@@ -97,6 +97,7 @@ pub enum TokenType {
     Int,
     Char,
     Const,
+    Long,
     If,
     Else,
     While,
@@ -122,6 +123,8 @@ impl From<String> for TokenType {
             TokenType::Char
         } else if token == "const" {
             TokenType::Const
+        } else if token == "long" {
+            TokenType::Long
         } else if token == "return" {
             TokenType::Return
         } else if token == "if" {
@@ -175,10 +178,19 @@ pub struct TypeQualifier {
     pub is_const: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum IntSize {
+    One = 1,
+    Four = 4,
+    Eight = 8,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypeDefinition {
-    INT(TypeQualifier),
-    CHAR(TypeQualifier),
+    INT {
+        size: IntSize,
+        qualifier: TypeQualifier,
+    },
     FUNCTION(Box<TypeDefinition>, ParameterList, bool), // bool is definition / is local
     POINTER(TypeQualifier, Box<TypeDefinition>),
 }
@@ -308,7 +320,10 @@ impl From<Vec<Statement>> for Statement {
 
 impl Default for TypeDefinition {
     fn default() -> Self {
-        TypeDefinition::INT(TypeQualifier::default())
+        TypeDefinition::INT {
+            size: IntSize::Four,
+            qualifier: TypeQualifier::default(),
+        }
     }
 }
 
@@ -475,8 +490,18 @@ impl DeclarationStatement {
 impl TypeDefinition {
     pub fn size(&self) -> usize {
         match self {
-            TypeDefinition::INT(_) => 4,
-            TypeDefinition::CHAR(_) => 1,
+            TypeDefinition::INT {
+                size: IntSize::One,
+                qualifier: _,
+            } => 1,
+            TypeDefinition::INT {
+                size: IntSize::Four,
+                qualifier: _,
+            } => 4,
+            TypeDefinition::INT {
+                size: IntSize::Eight,
+                qualifier: _,
+            } => 8,
             TypeDefinition::FUNCTION(_, _, _) => 8,
             TypeDefinition::POINTER(_, _) => 8,
         }
@@ -493,26 +518,28 @@ impl TypeDefinition {
 
 impl Expression {
     pub fn new_binop(op: BinOp, lhs: Box<Expression>, rhs: Box<Expression>) -> Expression {
-        let int_result = TypeDefinition::INT(TypeQualifier::from(true));
-        let char_result = TypeDefinition::INT(TypeQualifier::from(true));
+        let int_result = TypeDefinition::INT {
+            size: IntSize::Four,
+            qualifier: TypeQualifier::from(true),
+        };
+        let char_result = TypeDefinition::INT {
+            size: IntSize::One,
+            qualifier: TypeQualifier::from(true),
+        };
         let expr_type = match op {
             BinOp::Difference | BinOp::Product | BinOp::Quotient | BinOp::Sum => {
                 use crate::ast::TypeDefinition::*;
                 match (&lhs.expr_type, &rhs.expr_type) {
-                    (INT(_), INT(_)) => int_result,
-                    (INT(_), CHAR(_)) => int_result,
-                    (INT(_), FUNCTION(_, _, _)) => todo!(),
-                    (INT(_), POINTER(_, _)) => todo!(),
-                    (CHAR(_), INT(_)) => int_result,
-                    (CHAR(_), CHAR(_)) => char_result,
-                    (CHAR(_), FUNCTION(_, _, _)) => todo!(),
-                    (CHAR(_), POINTER(_, _)) => todo!(),
-                    (FUNCTION(_, _, _), INT(_)) => todo!(),
-                    (FUNCTION(_, _, _), CHAR(_)) => todo!(),
+                    (INT { size: s1, .. }, INT { size: s2, .. }) => TypeDefinition::INT {
+                        size: IntSize::max_size(s1, s2),
+                        qualifier: TypeQualifier { is_const: true },
+                    },
+                    (INT { .. }, FUNCTION(_, _, _)) => todo!(),
+                    (INT { .. }, POINTER(_, _)) => todo!(),
+                    (FUNCTION(_, _, _), INT { .. }) => todo!(),
                     (FUNCTION(_, _, _), FUNCTION(_, _, _)) => todo!(),
                     (FUNCTION(_, _, _), POINTER(_, _)) => todo!(),
-                    (POINTER(_, _), INT(_)) => lhs.expr_type.clone(),
-                    (POINTER(_, _), CHAR(_)) => todo!(),
+                    (POINTER(_, _), INT { .. }) => lhs.expr_type.clone(),
                     (POINTER(_, _), FUNCTION(_, _, _)) => todo!(),
                     (POINTER(_, _), POINTER(_, _)) => todo!(),
                 }
@@ -527,8 +554,10 @@ impl Expression {
         };
 
         let node = match (&lhs.expr_type, &rhs.expr_type) {
-            (TypeDefinition::INT(_), TypeDefinition::POINTER(_, _)) => todo!("support int(+-)ptr"),
-            (TypeDefinition::POINTER(_, p_type), TypeDefinition::INT(_)) => {
+            (TypeDefinition::INT { .. }, TypeDefinition::POINTER(_, _)) => {
+                todo!("support int(+-)ptr")
+            }
+            (TypeDefinition::POINTER(_, p_type), TypeDefinition::INT { .. }) => {
                 // todo: scale the int
                 // Assume the lhs is a pointer to some type
                 let scale_literal = LiteralValue::Int32(p_type.size() as i32);
@@ -542,16 +571,15 @@ impl Expression {
                         rhs,
                         Box::new(Expression::new_value(
                             Value::Literal(lv),
-                            TypeDefinition::INT(true.into()),
+                            TypeDefinition::INT {
+                                size: IntSize::Eight,
+                                qualifier: TypeQualifier::from(true),
+                            },
                         )),
                     )),
                 };
 
                 ExpressionNode::Binary(op, lhs, rhs)
-            }
-            (TypeDefinition::POINTER(_, _), TypeDefinition::CHAR(_))
-            | (TypeDefinition::CHAR(_), TypeDefinition::POINTER(_, _)) => {
-                todo!("Can you add char types to pointer types?");
             }
             _ => ExpressionNode::Binary(op, lhs, rhs),
         };
@@ -562,8 +590,7 @@ impl Expression {
         // TODO: correctly detemine the type of the Deref op
         let result_type = match op {
             UnaryOp::Deref => match &lhs.expr_type {
-                TypeDefinition::INT(_) => todo!(),
-                TypeDefinition::CHAR(_) => todo!(),
+                TypeDefinition::INT { .. } => todo!(),
                 TypeDefinition::FUNCTION(_, _, _) => todo!(),
                 TypeDefinition::POINTER(_, p_type) => p_type.as_ref().clone(),
             },
@@ -612,6 +639,18 @@ impl Expression {
 
 impl Token {
     pub fn pp_hide(&mut self, name: String) {
-        self.hideset.get_or_insert_with(HashSet::default).insert(name);
+        self.hideset
+            .get_or_insert_with(HashSet::default)
+            .insert(name);
+    }
+}
+
+impl IntSize {
+    fn max_size(s1: &IntSize, s2: &IntSize) -> IntSize {
+        if *s1 as u32 > *s2 as u32 {
+            *s1
+        } else {
+            *s2
+        }
     }
 }

@@ -68,7 +68,7 @@ impl Defines {
             if hideset.contains(ident_name) {
                 // Macro exists but is hiden for this token
                 return None;
-            } 
+            }
         }
 
         Some((ident_name.to_owned(), mcro))
@@ -89,9 +89,9 @@ impl Input {
     }
 
     fn unget(&mut self, items: Vec<ast::Token>) {
-       for item in items.into_iter().rev() {
-           self.source.push_front(item);
-       }
+        for item in items.into_iter().rev() {
+            self.source.push_front(item);
+        }
     }
 }
 
@@ -458,7 +458,7 @@ impl State {
         if let Some((name, mcro)) = self.defines.get_object_like_macro(&token) {
             match mcro {
                 Macro::ObjectLike { replacement_list } => {
-                    let replacement_list = replacement_list.iter().map(|t|{
+                    let replacement_list = replacement_list.iter().map(|t| {
                         let mut new_token = t.clone();
                         new_token.token_start = token.token_start;
                         new_token.token_end = token.token_end;
@@ -470,8 +470,11 @@ impl State {
                     });
 
                     self.input.unget(replacement_list.collect());
-                },
-                Macro::FunctionLike { arguments, replacement_list } => todo!(),
+                }
+                Macro::FunctionLike {
+                    arguments,
+                    replacement_list,
+                } => todo!(),
             }
         } else {
             self.output.push(token);

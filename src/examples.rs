@@ -160,4 +160,5 @@ mod compiler_unit_tests {
     compile!(compare example_13 "13_loops");
     compile!(compare example_14 "14_preprocess_subst");
     compile!(compare example_15 "15_aoc_2015_1");
+    compile!(compare example_16 "16_strlen");
 } // mod compiler_unit_tests

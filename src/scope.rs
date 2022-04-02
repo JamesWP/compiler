@@ -119,12 +119,21 @@ impl Scope {
 #[cfg(test)]
 use crate::ast::TypeQualifier;
 
+#[cfg(test)]
+use crate::ast::IntSize;
+
 #[test]
 fn test_scope() {
     let mut scope = Scope::default();
 
-    let int = TypeDefinition::INT(TypeQualifier::default());
-    let char = TypeDefinition::CHAR(TypeQualifier::default());
+    let int = TypeDefinition::INT {
+        size: IntSize::Four,
+        qualifier: TypeQualifier::default(),
+    };
+    let char = TypeDefinition::INT {
+        size: IntSize::One,
+        qualifier: TypeQualifier::default(),
+    };
     let int_p = TypeDefinition::POINTER(TypeQualifier::default(), Box::new(int.clone()));
 
     let find = |scope: &Scope, name| {

@@ -198,8 +198,25 @@ impl Default for ParameterPlacement {
 impl ParameterPlacement {
     pub fn place(&mut self, param_type: &ast::TypeDefinition) -> Parameter {
         match param_type {
-            ast::TypeDefinition::INT(_) | ast::TypeDefinition::CHAR(_) => {
+            ast::TypeDefinition::INT {
+                size: ast::IntSize::One,
+                ..
+            } => {
+                unimplemented!();
+            }
+            ast::TypeDefinition::INT {
+                size: ast::IntSize::Four,
+                ..
+            } => {
                 let reg = INTEGER_32_REGISTER_ORDER[self.num_integer_args].clone();
+                self.num_integer_args += 1;
+                Parameter::new(reg)
+            }
+            ast::TypeDefinition::INT {
+                size: ast::IntSize::Eight,
+                ..
+            } => {
+                let reg = INTEGER_64_REGISTER_ORDER[self.num_integer_args].clone();
                 self.num_integer_args += 1;
                 Parameter::new(reg)
             }
