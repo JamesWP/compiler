@@ -1,9 +1,6 @@
 use std::{cell::RefCell, convert::TryInto, rc::Rc};
 
-use crate::{
-    ast::{self, IntSize, TypeQualifier},
-    scope::Scope,
-};
+use crate::{ast, scope::Scope};
 
 pub struct ParserInput {
     tokens: Vec<ast::Token>,
@@ -382,7 +379,7 @@ impl ParserState {
                     ast::Value::Literal(ast::LiteralValue::Int32 { 0: v as i32 }),
                     ast::TypeDefinition::INT {
                         size: ast::IntSize::Four,
-                        qualifier: TypeQualifier::from(true),
+                        qualifier: ast::TypeQualifier::from(true),
                     },
                 )
             }
@@ -392,9 +389,9 @@ impl ParserState {
                     ast::Value::Literal(ast::LiteralValue::StringLiteral(v)),
                     ast::TypeDefinition::INT {
                         size: ast::IntSize::One,
-                        qualifier: TypeQualifier::from(true),
+                        qualifier: ast::TypeQualifier::from(true),
                     }
-                    .as_pointer_to(TypeQualifier::from(false)),
+                    .as_pointer_to(ast::TypeQualifier::from(false)),
                 )
             }
             Some(ast::TokenType::CharLiteral(v)) => {
@@ -407,7 +404,7 @@ impl ParserState {
                     )),
                     ast::TypeDefinition::INT {
                         size: ast::IntSize::Four,
-                        qualifier: TypeQualifier::from(true),
+                        qualifier: ast::TypeQualifier::from(true),
                     }, // This is strange, apparently in C sizeof('a') == 4!
                 )
             }

@@ -4,17 +4,16 @@ use crate::ast;
 
 struct Input {
     source: VecDeque<ast::Token>,
-    pos: usize,
 }
 
 enum Macro {
-    ObjectLike {
-        replacement_list: Vec<ast::Token>,
-    },
+    ObjectLike { replacement_list: Vec<ast::Token> },
+    /*
     FunctionLike {
         arguments: Vec<String>,
         replacement_list: Vec<ast::Token>,
     },
+    */
 }
 
 struct Defines {
@@ -75,7 +74,7 @@ impl Defines {
         Some((ident_name.to_owned(), mcro))
     }
 
-    fn remove_macro(&mut self, macro_name: String) -> std::io::Result<()>{
+    fn remove_macro(&mut self, macro_name: String) -> std::io::Result<()> {
         use std::collections::hash_map::Entry::*;
         match self.macros.entry(macro_name) {
             Occupied(entry) => entry.remove(),
@@ -110,7 +109,6 @@ impl From<Vec<ast::Token>> for Input {
     fn from(tokens: Vec<ast::Token>) -> Self {
         Self {
             source: tokens.into(),
-            pos: 0,
         }
     }
 }
@@ -306,28 +304,35 @@ impl State {
         match ident.as_str() {
             "include" => {
                 let include_path = match self.input.next() {
-                    Some(ast::Token{tt: ast::TokenType::StringLiteral(include_name), ..}) => {
-                        include_name
-                    },
-                    Some(ast::Token{tt: ast::TokenType::LessThan, ..}) => {
-                        match self.input.next() {
-                            Some(ast::Token{tt: ast::TokenType::Identifier(include_name), ..}) => {
-                                include_name
-                            },
-                            _ => {
-                                unimplemented!("unexpected token after #include '<'  expected 'path' '>'");
-                            }
+                    Some(ast::Token {
+                        tt: ast::TokenType::StringLiteral(include_name),
+                        ..
+                    }) => include_name,
+                    Some(ast::Token {
+                        tt: ast::TokenType::LessThan,
+                        ..
+                    }) => match self.input.next() {
+                        Some(ast::Token {
+                            tt: ast::TokenType::Identifier(include_name),
+                            ..
+                        }) => include_name,
+                        _ => {
+                            unimplemented!(
+                                "unexpected token after #include '<'  expected 'path' '>'"
+                            );
                         }
                     },
                     _ => {
-                        unimplemented!("unexpected token after #include expected '<' 'path' '>' or '\"path\"'");
+                        unimplemented!(
+                            "unexpected token after #include expected '<' 'path' '>' or '\"path\"'"
+                        );
                     }
                 };
 
                 self.include_file(&include_path)?;
 
                 Ok(())
-            },
+            }
             "define" => {
                 let macro_name = match self.input.next() {
                     Some(ast::Token {
@@ -371,11 +376,11 @@ impl State {
                 self.defines.remove_macro(macro_name)?;
 
                 Ok(())
-            },
+            }
             "line" => unimplemented!(),
             "error" => {
                 todo!("# error encountered while preprocessing, enhance errors");
-            },
+            }
             "pragma" => unimplemented!(),
             _ => unimplemented!("unknown identifier following #"),
         }
@@ -493,12 +498,15 @@ impl State {
  * contains the non parsing functions
  */
 impl State {
-    fn new(tokens: Vec<ast::Token>, lex_file: fn(&str) -> std::io::Result<Vec<ast::Token>>) -> Self {
+    fn new(
+        tokens: Vec<ast::Token>,
+        lex_file: fn(&str) -> std::io::Result<Vec<ast::Token>>,
+    ) -> Self {
         Self {
             input: tokens.into(),
             output: Default::default(),
             defines: Default::default(),
-            lex_file_fn: lex_file
+            lex_file_fn: lex_file,
         }
     }
     /**
@@ -520,11 +528,12 @@ impl State {
                     });
 
                     self.input.unget(replacement_list.collect());
-                }
-                Macro::FunctionLike {
-                    arguments,
-                    replacement_list,
-                } => todo!(),
+                } /*
+                  Macro::FunctionLike {
+                      arguments,
+                      replacement_list,
+                  } => todo!(),
+                  */
             }
         } else {
             self.output.push(token);

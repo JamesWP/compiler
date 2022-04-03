@@ -7,7 +7,8 @@ struct LexerInput {
     pos: usize,
     line: usize,
     column: usize,
-    lines: Vec<String>,
+    /* lines: Vec<String>,
+     */
 }
 
 impl LexerInput {
@@ -48,7 +49,9 @@ impl From<String> for LexerInput {
             pos: 0,
             line: 1,
             column: 1,
+            /*
             lines: string.lines().map(str::to_owned).collect(),
+            */
         }
     }
 }

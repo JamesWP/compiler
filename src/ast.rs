@@ -1,4 +1,4 @@
-use std::{cmp::max, collections::HashSet, fmt::Display};
+use std::{collections::HashSet, fmt::Display};
 
 use crate::scope::SharedOptionStackLocation;
 
@@ -520,10 +520,6 @@ impl Expression {
     pub fn new_binop(op: BinOp, lhs: Box<Expression>, rhs: Box<Expression>) -> Expression {
         let int_result = TypeDefinition::INT {
             size: IntSize::Four,
-            qualifier: TypeQualifier::from(true),
-        };
-        let char_result = TypeDefinition::INT {
-            size: IntSize::One,
             qualifier: TypeQualifier::from(true),
         };
         let expr_type = match op {
