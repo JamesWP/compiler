@@ -516,24 +516,26 @@ impl State {
         if let Some((name, mcro)) = self.defines.get_object_like_macro(&token) {
             match mcro {
                 Macro::ObjectLike { replacement_list } => {
-                    let replacement_list = replacement_list.iter().map(|t| {
+                    let mut replacement_list: Vec<_> = replacement_list.iter().map(|t| {
                         let mut new_token = t.clone();
                         new_token.token_start = token.token_start;
                         new_token.token_end = token.token_end;
-                        new_token.is_bol = false; // TODO: consider options
-                        new_token.is_wsep = true; // TODO: consider options
                         new_token.hideset = token.hideset.clone();
                         new_token.pp_hide(name.clone());
                         new_token
-                    });
+                    }).collect();
 
-                    self.input.unget(replacement_list.collect());
-                } /*
-                  Macro::FunctionLike {
-                      arguments,
-                      replacement_list,
-                  } => todo!(),
-                  */
+                    if let Some(first) = replacement_list.iter_mut().nth(0) {
+                        first.is_bol = token.is_bol;
+                        first.is_wsep = token.is_wsep;
+                    }
+                    
+                    self.input.unget(replacement_list);
+                }
+                Macro::FunctionLike {
+                    arguments,
+                    replacement_list,
+                } => todo!(),
             }
         } else {
             self.output.push(token);
