@@ -166,4 +166,5 @@ mod compiler_unit_tests {
     compile!(compare example_16 "16_strlen");
     compile!(compare example_17 "17_pp_include");
     compile!(compare example_18 "18_loops");
+    compile!(compare example_19 "19_pp_macro");
 } // mod compiler_unit_tests
