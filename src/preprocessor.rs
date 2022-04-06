@@ -53,7 +53,21 @@ impl Defines {
         }
     }
 
-    fn get_object_like_macro(&self, token: &ast::Token) -> Option<(String, &Macro)> {
+    fn add_function_macro(&mut self, name: String, macro_arguments: Vec<String>, replacement_list: Vec<ast::Token>) -> std::io::Result<()> {
+        use std::collections::hash_map::Entry::*;
+        match self.macros.entry(name) {
+            Occupied(_) => todo!("handle macro redefinition"),
+            Vacant(v) => {
+                v.insert(Macro::FunctionLike {
+                    replacement_list: replacement_list,
+                    arguments: macro_arguments,
+                });
+                Ok(())
+            }
+        }
+    }
+
+    fn get_macro(&self, token: &ast::Token) -> Option<(String, &Macro)> {
         let ident_name = match token.tt {
             ast::TokenType::Identifier(ref name) => name,
             _ => {
@@ -83,6 +97,7 @@ impl Defines {
 
         Ok(())
     }
+
 }
 
 impl Input {
@@ -348,7 +363,22 @@ impl State {
                      *  # define identifier lparen identifier-list , ... ) replacement-list new-line
                      */
                     Some(ast::TokenType::LParen) => {
-                        unimplemented!("function like macro")
+                        self.input.next();
+                        let macro_arguments = if self.input.peek_type() == Some(ast::TokenType::RParen) {
+                            self.input.next();
+                            Vec::new()
+                        } else {
+                            let identifier_list = self.parse_identifier_list()?;
+                            assert_eq!(self.input.peek_type(), Some(ast::TokenType::RParen));
+                            self.input.next();
+                            identifier_list
+                        };
+
+                        let replacement_list = self.parse_replacement_list()?;
+                        
+                        self.defines.add_function_macro(macro_name, macro_arguments, replacement_list);
+
+                        Ok(())
                     }
                     /* # define identifier replacement-list new-line
                      */
@@ -433,6 +463,46 @@ impl State {
         Ok(tokens)
     }
 
+    /**
+     * identifier-list:
+     *    : identifier
+     *    : identifier-list , identifier
+     *    ; 
+     */
+    fn parse_identifier_list(&mut self) -> std::io::Result<Vec<String>> {
+        let mut identifier_list = Vec::new();
+
+        match self.input.peek_type() {
+            Some(ast::TokenType::Identifier(identifier)) => {
+                self.input.next().unwrap();
+                identifier_list.push(identifier);
+            }
+            _ => { return Ok(identifier_list); }
+        }
+
+        loop {
+            match self.input.peek_type() {
+                Some(ast::TokenType::Comma) => {
+                    self.input.next().unwrap();
+                } 
+                _ => {
+                    return Ok(identifier_list)
+                }
+            };
+            
+            match self.input.peek_type() {
+                Some(ast::TokenType::Identifier(identifier)) => {
+                    self.input.next().unwrap();
+                    identifier_list.push(identifier);
+                }
+                _ => {
+                    unimplemented!("Unexpected token type after comma in identifier list");
+                }
+            }
+        }
+    }
+
+
     fn is_new_line(&self) -> bool {
         if self.input.peek().is_none() {
             true
@@ -513,7 +583,7 @@ impl State {
      * expand and emit
      */
     fn emit(&mut self, token: ast::Token) {
-        if let Some((name, mcro)) = self.defines.get_object_like_macro(&token) {
+        if let Some((name, mcro)) = self.defines.get_macro(&token) {
             match mcro {
                 Macro::ObjectLike { replacement_list } => {
                     let mut replacement_list: Vec<_> = replacement_list.iter().map(|t| {
