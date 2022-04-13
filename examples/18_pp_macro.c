@@ -5,5 +5,7 @@
 int main(int argc, const char* argv) {
     int width = 4;
     int height = 7;
-    printf("The area of a rectangle with side lengths %d and %d is %d", width, height, AREA(width, height));    
+    printf("The area of a rectangle with side lengths %d and %d is %d\n", width, height, AREA(width, height));    
+
+    return 0;
 }
