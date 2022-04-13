@@ -8,12 +8,10 @@ struct Input {
 
 enum Macro {
     ObjectLike { replacement_list: Vec<ast::Token> },
-    /*
     FunctionLike {
         arguments: Vec<String>,
         replacement_list: Vec<ast::Token>,
     },
-    */
 }
 
 struct Defines {
@@ -117,10 +115,6 @@ impl Input {
         for item in items.into_iter().rev() {
             self.source.push_front(item);
         }
-    }
-
-    fn unget_single(&mut self, item: ast::Token) {
-            self.source.push_front(item);
     }
 }
 
@@ -598,7 +592,7 @@ impl State {
         };
 
         let instance_token_list = |new_token_list: &Vec<ast::Token>, source_token: &ast::Token, name:&String| {
-            let mut replacement_list: Vec<_> = new_token_list.iter().map(|new_token| instance_token(new_token, &token, &name)).collect();
+            let mut replacement_list: Vec<_> = new_token_list.iter().map(|new_token| instance_token(new_token, &source_token, &name)).collect();
 
             if let Some(first) = replacement_list.iter_mut().nth(0) {
                 first.is_bol = token.is_bol;
