@@ -218,6 +218,8 @@ impl Lexer {
             '+' => {
                 if self.matches('=') {
                     TokenType::PlusEquals
+                } else if self.matches('+') {
+                    TokenType::PlusPlus
                 } else {
                     TokenType::Plus
                 }

@@ -77,6 +77,7 @@ pub enum TokenType {
     Semicolon,
     Divide,
     Plus,
+    PlusPlus,
     Minus,
     Comma,
     Equals,
@@ -199,6 +200,7 @@ pub enum TypeDefinition {
 pub enum Statement {
     JumpStatement(JumpStatement),
     WhileStatement(WhileStatement),
+    ForStatement(ForStatement),
     DoStatement(Box<Statement>, Option<Expression>),
     IfStatement(IfStatement),
     DeclarationStatement(DeclarationStatement),
@@ -224,6 +226,20 @@ pub enum JumpStatement {
 #[derive(Debug, Clone, PartialEq)]
 pub struct WhileStatement {
     pub condition_expression: Expression,
+    pub loop_body: Box<Statement>,
+}
+
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ForHead {
+    WithDeclaration(DeclarationStatement)
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ForStatement {
+    pub initialization: ForHead,
+    pub control_expression: Expression,
+    pub post_iteration_expression: Option<Expression>,
     pub loop_body: Box<Statement>,
 }
 
@@ -261,6 +277,7 @@ pub enum BinOp {
 pub enum UnaryOp {
     Negate,
     Deref,
+    PostfixIncrement,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -367,6 +384,9 @@ impl Statement {
             Statement::WhileStatement(w) => {
                 w.loop_body.visit_statements(f);
             }
+            Statement::ForStatement(fr) => {
+                fr.loop_body.visit_statements(f);
+            }
             Statement::IfStatement(i) => {
                 i.if_body.visit_statements(f);
                 if let Some(else_body) = &i.else_body {
@@ -445,6 +465,9 @@ impl FunctionDefinition {
 
         let mut add_definition = |statement: &Statement| match statement {
             Statement::DeclarationStatement(d) => {
+                declarations.push(d.clone());
+            }
+            Statement::ForStatement(ForStatement{initialization:ForHead::WithDeclaration(d), ..}) => {
                 declarations.push(d.clone());
             }
             _ => {}

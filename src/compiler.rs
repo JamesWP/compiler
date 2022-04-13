@@ -217,9 +217,21 @@ impl CompilationState {
         assemble!(self, "add", DL::new(8), reg::RSP);
     }
 
-    /// store the value in RAX into the address pointed to by the value in the top of the stack
-    /// also consumes the top of stack
-    /// leaves the value stored in RAX
+    /**
+     store the value in RAX into the address pointed to by the value in the top of the stack
+     also consumes the top of stack
+     leaves the value stored in RAX
+
+     input:
+        value: RAX
+        address: value in Top of stack
+
+     output:
+        stack is popped
+        value: RAX
+
+     */
+     
     fn compile_store(&mut self, type_def: &ast::TypeDefinition) -> std::io::Result<()> {
         assemble!(self, "pop", reg::RDI);
         match type_def.size() {
@@ -246,6 +258,15 @@ impl CompilationState {
         Ok(())
     }
 
+    /**
+     load a value into RAX from the address pointed to by RAX
+      
+     input:
+       RAX: Pointer to value
+     
+     output:
+       RAX: Value
+     */
     fn compile_load(&mut self, type_def: &ast::TypeDefinition) -> std::io::Result<()> {
         let load_size = type_def.size();
         match type_def {
@@ -399,6 +420,40 @@ impl CompilationState {
                 // end_label:
                 self.output_label(end_label)?;
             }
+            ast::Statement::ForStatement(ast::ForStatement {
+                initialization,
+                control_expression,
+                post_iteration_expression,
+                loop_body,
+            }) => {
+                match &initialization {
+                    ast::ForHead::WithDeclaration(decl) => {
+                        self.compile_declaration(decl)?;
+                    },
+                };
+
+                self.debug_expression("for", control_expression)?;
+                let start_label = self.labels.allocate_label();
+                let end_label = self.labels.allocate_label();
+                // start_label:
+                self.output_label(&start_label)?;
+                //   evaluate condition
+                self.compile_expression(control_expression)?;
+                assemble!(self, "cmp", DL::new(0), reg::RAX);
+                assemble!(self, "jz", &end_label);
+                //   if condition is not met jump to end_label
+                //   for body
+                self.compile_statement(loop_body)?;
+
+                if let Some(expression) = post_iteration_expression {
+                    self.compile_expression(expression)?;
+                }
+
+                assemble!(self, "jmp", &start_label);
+                //   jump to start
+                // end_label:
+                self.output_label(end_label)?;
+            }
             ast::Statement::IfStatement(ast::IfStatement {
                 condition_expression,
                 if_body,
@@ -450,21 +505,7 @@ impl CompilationState {
                 self.output_label(end_label)?;
             }
             ast::Statement::DeclarationStatement(declaration) => {
-                self.debug_statement(statement)?;
-                let name = &declaration.name;
-
-                if let Some(e) = &declaration.expression {
-                    // Store address is pushed onto the stack
-                    self.compile_address(&ast::Expression::new_value(
-                        ast::Value::Identifier(name.to_string(), Rc::clone(&declaration.location)),
-                        declaration.decl_type.to_owned(),
-                    ))?;
-                    self.push(); // This is consumed by compile_store
-
-                    // Value to store is placed in RAX
-                    self.compile_expression(&e)?;
-                    self.compile_store(&declaration.decl_type)?; // Stack popped here
-                }
+                self.compile_declaration(declaration)?
             }
             ast::Statement::Expression(e) => {
                 self.debug_statement(statement)?;
@@ -475,6 +516,26 @@ impl CompilationState {
                     self.compile_statement(statement)?;
                 }
             }
+        }
+
+        Ok(())
+    }
+
+    fn compile_declaration(&mut self, declaration: &ast::DeclarationStatement) -> std::io::Result<()> {
+        let name = &declaration.name;
+
+        if let Some(e) = &declaration.expression {
+            self.debug_expression(name, e)?;
+            // Store address is pushed onto the stack
+            self.compile_address(&ast::Expression::new_value(
+                ast::Value::Identifier(name.to_string(), Rc::clone(&declaration.location)),
+                declaration.decl_type.to_owned(),
+            ))?;
+            self.push(); // This is consumed by compile_store
+
+            // Value to store is placed in RAX
+            self.compile_expression(&e)?;
+            self.compile_store(&declaration.decl_type)?; // Stack popped here
         }
 
         Ok(())
@@ -601,9 +662,9 @@ impl CompilationState {
                 self.pop();
             }
             ast::ExpressionNode::Unary(op, lhs) => {
-                self.compile_expression(lhs.as_ref())?;
                 match op {
                     ast::UnaryOp::Deref => {
+                        self.compile_expression(lhs.as_ref())?;
                         assemble!(
                             self,
                             "mov",
@@ -611,7 +672,21 @@ impl CompilationState {
                             result_64
                         )
                     }
+                    ast::UnaryOp::PostfixIncrement => {
+                        self.compile_address(lhs.as_ref())?;
+                        self.push();
+                        self.compile_load(&expression.expr_type)?;
+                        self.push();
+                        // increment
+                        // get address from stack -> RDI
+                        // store RAX -> RDI
+                        self.pop();
+                        self.pop();
+
+                        todo!()
+                    }
                     ast::UnaryOp::Negate => {
+                        self.compile_expression(lhs.as_ref())?;
                         assemble!(self, op_suffix("neg"), result);
                     }
                 }

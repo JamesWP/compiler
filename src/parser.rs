@@ -32,6 +32,8 @@ impl ParserInput {
             t
         }
     }
+
+    #[must_use]
     fn expect<TT: AsRef<ast::TokenType>>(&mut self, token: TT) -> Result<(), String> {
         if self.peek().map(|t| t.tt.as_ref()) == Some(token.as_ref()) {
             self.pop();
@@ -130,6 +132,51 @@ impl ParserState {
                 condition_expression,
                 loop_body,
             }))
+        } else if self.matches(ast::TokenType::For) {
+            // 6.8.5.3 The for statement
+            self.input.expect(ast::TokenType::LParen)?;
+            if is_type_decl(self.peek_type()) {
+                self.scope.begin_scope()?;
+                // This declares a new variable scoped to the other expressions and the body
+                let declaration_statement = self.parse_declaration()?;
+
+                // This expression will decide if the body will be executed
+                // if this expression evaluates to zero the loop will continue
+                let controlling_expression = if self.matches(ast::TokenType::Semicolon) {
+                    // The expresson was not provided, evaluate to some none zero value
+                    let literal_value = ast::Value::Literal(ast::LiteralValue::Int32(1));
+                    let literal_type = ast::TypeDefinition::INT { size: ast::IntSize::Four, qualifier: ast::TypeQualifier::from(true) };
+                    ast::Expression::new_value(literal_value, literal_type)
+                } else {
+                    let expression = self.parse_expression()?;
+                    self.input.expect(ast::TokenType::Semicolon)?;
+                    expression
+                };
+
+                // This expression is evaluated after each execution of the loop body
+                let post_iteration_expression = if self.matches(ast::TokenType::RParen) {
+                    let literal_value = ast::Value::Literal(ast::LiteralValue::Int32(1));
+                    let literal_type = ast::TypeDefinition::INT { size: ast::IntSize::Four, qualifier: ast::TypeQualifier::from(true) };
+                    ast::Expression::new_value(literal_value, literal_type)
+                } else {
+                    let expression  = self.parse_expression()?;
+                    self.input.expect(ast::TokenType::RParen)?;
+                    expression
+                };
+
+                let loop_body = Box::new(self.parse_statement()?);
+
+                self.scope.end_scope()?;
+
+                Ok(ast::Statement::ForStatement(ast::ForStatement {
+                    initialization: ast::ForHead::WithDeclaration(declaration_statement),
+                    control_expression: controlling_expression, 
+                    post_iteration_expression: Some(post_iteration_expression),
+                    loop_body,
+                }))
+            } else {
+                unimplemented!("For loops may not declare a new variable")
+            }
         } else if self.matches(ast::TokenType::If) {
             self.input.expect(ast::TokenType::LParen)?;
             let condition_expression = self.parse_expression()?;
@@ -147,23 +194,9 @@ impl ParserState {
                 else_body,
             }))
         } else if is_type_decl(self.peek_type()) {
-            let base_type = self.parse_declaration_specifiers()?;
-            let (name, decl_type) = self.parse_declarator(base_type)?;
-            let location = self.scope.define(&name, &decl_type, false);
-            if self.matches(ast::TokenType::Semicolon) {
-                Ok(ast::Statement::DeclarationStatement(
-                    ast::DeclarationStatement::new(decl_type, name, location),
-                ))
-            } else {
-                self.input.expect(ast::TokenType::Equals)?;
-                let expression = self.parse_expression()?;
-                self.input.expect(ast::TokenType::Semicolon)?;
-                Ok(ast::Statement::DeclarationStatement(
-                    ast::DeclarationStatement::new_with_expression(
-                        decl_type, name, expression, location,
-                    ),
-                ))
-            }
+            let declaration_statement = self.parse_declaration()?;
+
+            Ok(ast::Statement::DeclarationStatement(declaration_statement))
         } else if self.peek_type() == Some(ast::TokenType::LBrace) {
             self.scope.begin_scope()?;
             let statement = self.parse_compound_statement()?;
@@ -175,6 +208,22 @@ impl ParserState {
             let expr = self.parse_expression()?;
             self.input.expect(ast::TokenType::Semicolon)?;
             Ok(ast::Statement::Expression(expr))
+        }
+    }
+
+    fn parse_declaration(&mut self) -> ParseResult<ast::DeclarationStatement> {
+        assert!(is_type_decl(self.peek_type()));
+        let base_type = self.parse_declaration_specifiers()?;
+        let (name, decl_type) = self.parse_declarator(base_type)?;
+        let location = self.scope.define(&name, &decl_type, false);
+        if self.matches(ast::TokenType::Semicolon) {
+            Ok(ast::DeclarationStatement::new(decl_type, name, location))
+        } else {
+            self.input.expect(ast::TokenType::Equals)?;
+            let expression = self.parse_expression()?;
+            self.input.expect(ast::TokenType::Semicolon)?;
+            Ok(ast::DeclarationStatement::new_with_expression(
+                    decl_type, name, expression, location))
         }
     }
 
@@ -365,6 +414,8 @@ impl ParserState {
                 self.input.expect(ast::TokenType::RParen)?;
 
                 value = ast::Expression::new_call(value.into(), argument_expressions)
+            } else if self.matches(ast::TokenType::PlusPlus) {
+                value = ast::Expression::new_unaryop(ast::UnaryOp::PostfixIncrement, Box::new(value));
             } else {
                 return Ok(value);
             }
