@@ -136,7 +136,7 @@ mod compiler_unit_tests {
                     $(
                         {
                             let input_name = format!("examples/{}.c", $filename);
-                            let object_name = format!("target/{}_ref.o", $filename);
+                            let object_name = format!("target/{}_{}.o", $filename, $suffix);
                             assert!($compile_func(&input_name, &object_name), "compiler exited with non zero exit");
                             object_name
                         },
@@ -167,4 +167,5 @@ mod compiler_unit_tests {
     compile!(compare example_17 "17_pp_include");
     compile!(compare example_18 "18_loops");
     compile!(compare example_19 "19_pp_macro");
+    compile!(compare example_20 "20_bug");
 } // mod compiler_unit_tests
