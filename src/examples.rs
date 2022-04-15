@@ -32,7 +32,11 @@ mod compiler_unit_tests {
         println!(
             "[{:<10}] {}{}{}: {} {}",
             name,
-            if result.is_ok() { "\u{001b}[32m" } else { "\u{001b}[31m"},
+            if result.is_ok() {
+                "\u{001b}[32m"
+            } else {
+                "\u{001b}[31m"
+            },
             if result.is_ok() { "SUCCESS" } else { "FAILED" },
             "\u{001b}[0m",
             program,
@@ -83,7 +87,11 @@ mod compiler_unit_tests {
             println!(
                 "[{:<10}] {}{}{}: {} {}",
                 "COMPILER",
-                if result.is_ok() { "\u{001b}[32m" } else { "\u{001b}[31m"},
+                if result.is_ok() {
+                    "\u{001b}[32m"
+                } else {
+                    "\u{001b}[31m"
+                },
                 if result.is_ok() { "SUCCESS" } else { "FAILED" },
                 "\u{001b}[0m",
                 program,

@@ -209,11 +209,29 @@ impl CompilationState {
         Ok(())
     }
 
-    fn push(&mut self) {
-        assemble!(self, "pushq", reg::RAX);
+    fn push_reg(&mut self, register: reg) {
+        match register.size() {
+          8 => { assemble!(self, "push", register); }
+          4 => { assemble!(self, "push", register.to_full_reg()); }
+          _ => { unimplemented!("pushing odd sized register"); }
+        }
     }
 
-    fn pop(&mut self) {
+    fn pop_reg(&mut self, register: reg) {
+        match register.size() {
+          8 => { assemble!(self, "pop", register); }
+          4 => { assemble!(self, "pop", register.to_full_reg()); }
+          _ => { unimplemented!("popping odd sized register"); }
+        }
+    }
+
+    // implicit 8 bytes, using RAX
+    fn push(&mut self) {
+        self.push_reg(reg::RAX);
+    }
+
+    // implicit 8 bytes
+    fn pop_discard(&mut self) {
         assemble!(self, "add", DL::new(8), reg::RSP);
     }
 
@@ -233,7 +251,7 @@ impl CompilationState {
      */
      
     fn compile_store(&mut self, type_def: &ast::TypeDefinition) -> std::io::Result<()> {
-        assemble!(self, "pop", reg::RDI);
+        self.pop_reg(reg::RDI);
         match type_def.size() {
             8 => assemble!(
                 self,
@@ -381,7 +399,7 @@ impl CompilationState {
                 }
 
                 // TODO: read information about all registers which need popping
-                assemble!(self, "popq", reg::RBP);
+                self.pop_reg(reg::RBP);
                 assemble!(self, "ret");
             }
             ast::Statement::DoStatement(loop_body, None) => {
@@ -642,7 +660,7 @@ impl CompilationState {
                     _ => todo!("implement binop {:?}", op),
                 }
 
-                self.pop();
+                self.pop_discard();
             }
             ast::ExpressionNode::Unary(op, lhs) => {
                 match op {
@@ -723,27 +741,41 @@ impl CompilationState {
             },
             ast::ExpressionNode::Call(lhs, args) => {
                 // TODO: check function types
-                let call_is_vararg =
-                    if let ast::TypeDefinition::FUNCTION(_, params, _) = &lhs.expr_type {
-                        params.var_args
-                    } else {
-                        false
-                    };
+
+                if args.len() > platform::ParameterPlacement::max_params() {
+                    unimplemented!("too many params for registers");
+                }
+  
+                let call_is_vararg = lhs.expr_type.is_vararg_call();
 
                 let mut param_place = platform::ParameterPlacement::default();
+                
+                let mut arg_reg = Vec::new();
 
                 for arg in args {
                     let expr_type = &arg.expr_type;
                     let param = param_place.place(&expr_type);
-                    if let Some(ref reg) = param.reg {
-                        self.compile_expression(&arg)?;
+                    arg_reg.push(param.reg);
+
+                    if param.reg.is_some() {
+                        self.compile_expression(arg)?;
+                        self.push();
                         match expr_type.size() {
-                            4 => assemble!(self, "movl", reg::EAX, reg),
-                            8 => assemble!(self, "movq", reg::RAX, reg),
-                            _ => todo!("Can't move parameter of this size"),
+                            4 | 8 => {},
+                            _ => todo!("Can't call with parameter of this size"),
                         }
                     } else {
-                        unimplemented!();
+                        unimplemented!("argument not passed by register");
+                    }
+                }
+                
+                // Stack now contains arguments, popping will get them in
+                // reversed order. put each argument in its register
+                for reg in arg_reg.iter().rev() {
+                    if let Some(reg) = reg {
+                      self.pop_reg(*reg);
+                    } else {
+                      unimplemented!("argument not passed by register");
                     }
                 }
 

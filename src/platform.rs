@@ -40,6 +40,31 @@ pub enum X86_64Reg {
     R15D, // lower hald of R15
 }
 
+impl X86_64Reg {
+    /** size of the reister in bytes */
+    pub fn size(&self) -> usize {
+        use X86_64Reg::*;
+        match self {
+            RAX | RBX | RCX | RDX | RSI | RDI | RBP => 8,
+            EAX | EBX | ECX | EDX | ESI | EDI => 4,
+            _ => unimplemented!("Size of {} not implemented", self),
+        }
+    }
+    pub fn to_full_reg(&self) -> X86_64Reg {
+        assert_ne!(8, self.size());
+        use X86_64Reg::*;
+        match self {
+            EAX  => RAX,
+            EBX  => RBX,
+            ECX  => RCX,
+            EDX  => RDX,
+            ESI  => RSI,
+            EDI  => RDI,
+            _ => unimplemented!("full reg of {} not implemented", self),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct StackRelativeLocation {
     // offset from this register (RBP)
@@ -226,6 +251,13 @@ impl ParameterPlacement {
                 Parameter::new(reg)
             }
         }
+    }
+  
+    /** the number of parameters which can be passed by register */ 
+    pub fn max_params() -> usize {
+        // this is a temporary limit, other args are passed by stack
+        assert_eq!(INTEGER_64_REGISTER_ORDER.len(), INTEGER_32_REGISTER_ORDER.len());
+        INTEGER_64_REGISTER_ORDER.len()
     }
 }
 

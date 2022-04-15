@@ -528,6 +528,13 @@ impl TypeDefinition {
     pub fn as_pointer_to(self, specifiers: TypeQualifier) -> Self {
         TypeDefinition::POINTER(specifiers, Box::new(self))
     }
+
+    pub fn is_vararg_call(&self) -> bool {
+        match self {
+          TypeDefinition::FUNCTION(_, params, _) => params.var_args,
+          _ => false
+        }
+    }
 }
 
 impl Expression {
