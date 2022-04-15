@@ -30,9 +30,11 @@ mod compiler_unit_tests {
         };
 
         println!(
-            "[{:<10}] {}: {} {}",
+            "[{:<10}] {}{}{}: {} {}",
             name,
+            if result.is_ok() { "\u{001b}[32m" } else { "\u{001b}[31m"},
             if result.is_ok() { "SUCCESS" } else { "FAILED" },
+            "\u{001b}[0m",
             program,
             args.join(" ")
         );
@@ -79,9 +81,11 @@ mod compiler_unit_tests {
             let program = "target/debug/compiler";
             let args = [source_file, "-o", object_file];
             println!(
-                "[{:<10}] {}: {} {}",
+                "[{:<10}] {}{}{}: {} {}",
                 "COMPILER",
+                if result.is_ok() { "\u{001b}[32m" } else { "\u{001b}[31m"},
                 if result.is_ok() { "SUCCESS" } else { "FAILED" },
+                "\u{001b}[0m",
                 program,
                 args.join(" ")
             );
@@ -120,15 +124,15 @@ mod compiler_unit_tests {
                 println!("======== Example {:02} =========", stringify!($program));
                 println!("PWD: {}", std::env::current_dir().unwrap().display());
 
-                let ref_output = compile!(do_run "NATIVE" "ref" ref_compile (stringify!($program)) $(file $filename)* $(; $($arg)+)?);
-                let test_output = compile!(do_run "TESTING" "test" test_compile (stringify!($program)) $(file $filename)* $(; $($arg)+)?);
+                let ref_output = compile!(do_run "NATIVE" "ref" "\u{001b}[35m" ref_compile (stringify!($program)) $(file $filename)* $(; $($arg)+)?);
+                let test_output = compile!(do_run "TESTING" "test" "\u{001b}[33m" test_compile (stringify!($program)) $(file $filename)* $(; $($arg)+)?);
 
                 assert_eq!(ref_output, test_output, "Output should be the same");
             }
         };
-        (do_run $title:tt $suffix:tt $compile_func:tt $program:tt $(file $filename:expr)* $(; $($arg:tt)+)?) => {
+        (do_run $title:tt $suffix:tt $color:tt $compile_func:tt $program:tt $(file $filename:expr)* $(; $($arg:tt)+)?) => {
             {
-                println!("----------- Building {} --------------", $title);
+                println!("----------- {}Building {}{} --------------", $color, $title, "\u{001b}[0m");
                 let program_name = format!("target/{}_{}", $program, $suffix);
                 let mut output = String::new();
                 assert!(link(&program_name, &[
