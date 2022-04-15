@@ -7,7 +7,9 @@ struct Input {
 }
 
 enum Macro {
-    ObjectLike { replacement_list: Vec<ast::Token> },
+    ObjectLike {
+        replacement_list: Vec<ast::Token>,
+    },
     FunctionLike {
         arguments: Vec<String>,
         replacement_list: Vec<ast::Token>,
@@ -51,7 +53,12 @@ impl Defines {
         }
     }
 
-    fn add_function_macro(&mut self, name: String, macro_arguments: Vec<String>, replacement_list: Vec<ast::Token>) -> std::io::Result<()> {
+    fn add_function_macro(
+        &mut self,
+        name: String,
+        macro_arguments: Vec<String>,
+        replacement_list: Vec<ast::Token>,
+    ) -> std::io::Result<()> {
         use std::collections::hash_map::Entry::*;
         match self.macros.entry(name) {
             Occupied(_) => todo!("handle macro redefinition"),
@@ -95,7 +102,6 @@ impl Defines {
 
         Ok(())
     }
-
 }
 
 impl Input {
@@ -362,19 +368,24 @@ impl State {
                      */
                     Some(ast::TokenType::LParen) => {
                         self.input.next();
-                        let macro_arguments = if self.input.peek_type() == Some(ast::TokenType::RParen) {
-                            self.input.next();
-                            Vec::new()
-                        } else {
-                            let identifier_list = self.parse_identifier_list()?;
-                            assert_eq!(self.input.peek_type(), Some(ast::TokenType::RParen));
-                            self.input.next();
-                            identifier_list
-                        };
+                        let macro_arguments =
+                            if self.input.peek_type() == Some(ast::TokenType::RParen) {
+                                self.input.next();
+                                Vec::new()
+                            } else {
+                                let identifier_list = self.parse_identifier_list()?;
+                                assert_eq!(self.input.peek_type(), Some(ast::TokenType::RParen));
+                                self.input.next();
+                                identifier_list
+                            };
 
                         let replacement_list = self.parse_replacement_list()?;
-                        
-                        self.defines.add_function_macro(macro_name, macro_arguments, replacement_list)?;
+
+                        self.defines.add_function_macro(
+                            macro_name,
+                            macro_arguments,
+                            replacement_list,
+                        )?;
 
                         Ok(())
                     }
@@ -465,7 +476,7 @@ impl State {
      * identifier-list:
      *    : identifier
      *    : identifier-list , identifier
-     *    ; 
+     *    ;
      */
     fn parse_identifier_list(&mut self) -> std::io::Result<Vec<String>> {
         let mut identifier_list = Vec::new();
@@ -475,19 +486,19 @@ impl State {
                 self.input.next().unwrap();
                 identifier_list.push(identifier);
             }
-            _ => { return Ok(identifier_list); }
+            _ => {
+                return Ok(identifier_list);
+            }
         }
 
         loop {
             match self.input.peek_type() {
                 Some(ast::TokenType::Comma) => {
                     self.input.next().unwrap();
-                } 
-                _ => {
-                    return Ok(identifier_list)
                 }
+                _ => return Ok(identifier_list),
             };
-            
+
             match self.input.peek_type() {
                 Some(ast::TokenType::Identifier(identifier)) => {
                     self.input.next().unwrap();
@@ -499,7 +510,6 @@ impl State {
             }
         }
     }
-
 
     fn is_new_line(&self) -> bool {
         if self.input.peek().is_none() {
@@ -580,8 +590,7 @@ impl State {
     /**
      * expand and emit
      */
-    fn emit(&mut self, token: ast::Token) -> std::io::Result<()>{
-
+    fn emit(&mut self, token: ast::Token) -> std::io::Result<()> {
         let instance_token = |new_token: &ast::Token, source_token: &ast::Token, name: &String| {
             let mut new_token = new_token.clone();
             new_token.token_start = source_token.token_start;
@@ -591,21 +600,25 @@ impl State {
             new_token
         };
 
-        let instance_token_list = |new_token_list: &Vec<ast::Token>, source_token: &ast::Token, name:&String| {
-            let mut replacement_list: Vec<_> = new_token_list.iter().map(|new_token| instance_token(new_token, &source_token, &name)).collect();
+        let instance_token_list =
+            |new_token_list: &Vec<ast::Token>, source_token: &ast::Token, name: &String| {
+                let mut replacement_list: Vec<_> = new_token_list
+                    .iter()
+                    .map(|new_token| instance_token(new_token, &source_token, &name))
+                    .collect();
 
-            if let Some(first) = replacement_list.iter_mut().nth(0) {
-                first.is_bol = token.is_bol;
-                first.is_wsep = token.is_wsep;
-            }
+                if let Some(first) = replacement_list.iter_mut().nth(0) {
+                    first.is_bol = token.is_bol;
+                    first.is_wsep = token.is_wsep;
+                }
 
-            replacement_list
-        };
+                replacement_list
+            };
 
         if let Some((name, mcro)) = self.defines.get_macro(&token) {
             match mcro {
                 Macro::ObjectLike { replacement_list } => {
-                    let replacement_list = instance_token_list(replacement_list, &token, &name); 
+                    let replacement_list = instance_token_list(replacement_list, &token, &name);
                     self.input.unget(replacement_list);
                 }
                 Macro::FunctionLike {
@@ -613,13 +626,19 @@ impl State {
                     replacement_list,
                 } => {
                     // now we have to parse the argument list for the macro
-                    let macro_arguments: Vec<Vec<ast::Token>> = self.input.parse_macro_argument_list()?;
+                    let macro_arguments: Vec<Vec<ast::Token>> =
+                        self.input.parse_macro_argument_list()?;
 
-                    assert_eq!(macro_arguments.len(), arguments.len(), "function like macro called with incorrect number of arguments");
+                    assert_eq!(
+                        macro_arguments.len(),
+                        arguments.len(),
+                        "function like macro called with incorrect number of arguments"
+                    );
 
                     // create map from token to argument index.
-                    let argument_index_map: HashMap<String, usize> = arguments.iter().cloned().zip(0..).collect();
-                   
+                    let argument_index_map: HashMap<String, usize> =
+                        arguments.iter().cloned().zip(0..).collect();
+
                     let mut list = Vec::new();
 
                     // unget tokens from the replacement list, stopping when any token matches an argument in the argument map and ungetting that instead.
@@ -638,9 +657,9 @@ impl State {
                         let token = instance_token(new_token, &token, &name);
                         list.push(token);
                     }
-                    
+
                     self.input.unget(list);
-                },
+                }
             }
         } else {
             self.output.push(token);
@@ -663,14 +682,13 @@ impl Input {
      * a macro argument list starts and ends with a ( and ) token and contains a , seperated sequence of tokens
      *
      * we skip all intervening matched pairs of ( and )
-     * 
+     *
      * (a,b,c) => [a, b, c]
      * (a a, b) => [a a, b]
      * (a(c), d) => [a(c), d]
      * (a(c,f), d) => [a(c,f), d]
      */
-    fn parse_macro_argument_list(&mut self) -> std::io::Result<Vec<Vec<ast::Token>>>{
-
+    fn parse_macro_argument_list(&mut self) -> std::io::Result<Vec<Vec<ast::Token>>> {
         assert_eq!(self.peek_type(), Some(ast::TokenType::LParen));
         self.next().unwrap();
 
@@ -682,16 +700,16 @@ impl Input {
                 Some(ast::TokenType::Comma) => {
                     self.next();
                     argument_list.push(Default::default());
-                },
+                }
                 Some(ast::TokenType::LParen) => todo!(),
-                Some(ast::TokenType::RParen) => { 
-                    self.next(); 
-                    break; 
-                },
+                Some(ast::TokenType::RParen) => {
+                    self.next();
+                    break;
+                }
                 Some(_) => {
                     let token = self.next().unwrap();
                     argument_list.last_mut().unwrap().push(token);
-                },
+                }
                 None => unimplemented!(),
             }
         }

@@ -65,12 +65,11 @@ mod compiler_unit_tests {
     }
 
     fn test_compile(source_file: &str, object_file: &str) -> bool {
-        let options = CompilerOptions {
-            filename: source_file.to_owned(),
-            output_filename: object_file.to_owned(),
-            debug_lex: false,
-            debug_ast: false,
-            debug_pp: false,
+        let options = {
+            let mut opts = CompilerOptions::default();
+            opts.filename = source_file.to_owned();
+            opts.output_filename = object_file.to_owned();
+            opts
         };
 
         let result = compile(&options);

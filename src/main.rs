@@ -9,14 +9,10 @@ mod platform;
 mod preprocessor;
 mod scope;
 
+use std::io::Write;
+
 fn main() -> std::io::Result<()> {
-    let mut options = CompilerOptions {
-        filename: "examples/01_simple.c".to_owned(),
-        output_filename: "a.o".to_owned(),
-        debug_ast: false,
-        debug_lex: false,
-        debug_pp: false,
-    };
+    let mut options = CompilerOptions::default();
 
     let mut args = std::env::args().skip(1);
 
@@ -37,9 +33,13 @@ fn main() -> std::io::Result<()> {
         if arg == "-d" {
             options.debug_ast = true;
             continue;
-        } else {
-            options.filename = arg;
         }
+        if arg == "-a" {
+            options.debug_assembly = true;
+            continue;
+        }
+
+        options.filename = arg;
     }
 
     compile(&options)
@@ -52,6 +52,20 @@ pub struct CompilerOptions {
     debug_lex: bool,
     debug_ast: bool,
     debug_pp: bool,
+    debug_assembly: bool,
+}
+
+impl Default for CompilerOptions {
+    fn default() -> CompilerOptions {
+        CompilerOptions {
+            filename: "examples/01_simple.c".to_owned(),
+            output_filename: "a.o".to_owned(),
+            debug_ast: false,
+            debug_lex: false,
+            debug_pp: false,
+            debug_assembly: false,
+        }
+    }
 }
 
 pub fn compile(compiler_options: &CompilerOptions) -> std::io::Result<()> {
@@ -98,9 +112,12 @@ pub fn compile(compiler_options: &CompilerOptions) -> std::io::Result<()> {
 
     std::fs::write(compiler_options.output_filename.clone(), &assembly)?;
 
-    use std::io::Write;
-    for (line_no, line) in assembly.lines().enumerate() {
-        println!("{:<03}    {}", line_no + 1, line);
+    if compiler_options.debug_assembly {
+        for (line_no, line) in assembly.lines().enumerate() {
+            println!("{:<03}    {}", line_no + 1, line);
+        }
+        println!();
+        return Ok(());
     }
 
     let mut child = std::process::Command::new("as")
