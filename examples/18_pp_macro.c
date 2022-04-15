@@ -1,5 +1,6 @@
 #include "examples/io.h"
 
+#define AREA(l,w) (l*w)
 
 int main(int argc, const char* argv) {
     int width = 4;
