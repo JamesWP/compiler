@@ -227,6 +227,8 @@ impl Lexer {
             '-' => {
                 if self.matches('=') {
                     TokenType::MinusEquals
+                } else if self.matches('-') {
+                    TokenType::MinusMinus
                 } else {
                     TokenType::Minus
                 }

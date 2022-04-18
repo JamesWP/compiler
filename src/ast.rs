@@ -79,6 +79,7 @@ pub enum TokenType {
     Plus,
     PlusPlus,
     Minus,
+    MinusMinus,
     Comma,
     Equals,
     Elipsis,
@@ -271,7 +272,10 @@ pub enum BinOp {
 pub enum UnaryOp {
     Negate,
     Deref,
-    PostfixIncrement,
+    PostIncrement,
+    PreIncrement,
+    PostDecrement,
+    PreDecrement,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -531,8 +535,8 @@ impl TypeDefinition {
 
     pub fn is_vararg_call(&self) -> bool {
         match self {
-          TypeDefinition::FUNCTION(_, params, _) => params.var_args,
-          _ => false
+            TypeDefinition::FUNCTION(_, params, _) => params.var_args,
+            _ => false,
         }
     }
 }

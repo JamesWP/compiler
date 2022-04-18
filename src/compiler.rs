@@ -211,17 +211,29 @@ impl CompilationState {
 
     fn push_reg(&mut self, register: reg) {
         match register.size() {
-          8 => { assemble!(self, "push", register); }
-          4 => { assemble!(self, "push", register.to_full_reg()); }
-          _ => { unimplemented!("pushing odd sized register"); }
+            8 => {
+                assemble!(self, "push", register);
+            }
+            4 => {
+                assemble!(self, "push", register.to_full_reg());
+            }
+            _ => {
+                unimplemented!("pushing odd sized register");
+            }
         }
     }
 
     fn pop_reg(&mut self, register: reg) {
         match register.size() {
-          8 => { assemble!(self, "pop", register); }
-          4 => { assemble!(self, "pop", register.to_full_reg()); }
-          _ => { unimplemented!("popping odd sized register"); }
+            8 => {
+                assemble!(self, "pop", register);
+            }
+            4 => {
+                assemble!(self, "pop", register.to_full_reg());
+            }
+            _ => {
+                unimplemented!("popping odd sized register");
+            }
         }
     }
 
@@ -235,23 +247,26 @@ impl CompilationState {
         assemble!(self, "add", DL::new(8), reg::RSP);
     }
 
-    /**
-     store the value in RAX into the address pointed to by the value in the top of the stack
-     also consumes the top of stack
-     leaves the value stored in RAX
+    fn peek_stack(&mut self, output_register: reg, position_in_stack: i32) {
+        assemble!(
+            self,
+            "mov",
+            StackRelativeLocation::new_with_reg(reg::RSP, position_in_stack * 8),
+            output_register
+        );
+    }
 
-     input:
-        value: RAX
-        address: value in Top of stack
+    /// store the value in RAX into the address pointed to by the value in the top of the stack
+    /// also consumes the top of stack
+    /// leaves the value stored in RAX
+    fn compile_store(
+        &mut self,
+        type_def: &ast::TypeDefinition,
+        position_in_stack: i32,
+    ) -> std::io::Result<()> {
+        // get store address from stack.
+        self.peek_stack(reg::RDI, position_in_stack);
 
-     output:
-        stack is popped
-        value: RAX
-
-     */
-     
-    fn compile_store(&mut self, type_def: &ast::TypeDefinition) -> std::io::Result<()> {
-        self.pop_reg(reg::RDI);
         match type_def.size() {
             8 => assemble!(
                 self,
@@ -506,7 +521,22 @@ impl CompilationState {
                 self.output_label(end_label)?;
             }
             ast::Statement::DeclarationStatement(declaration) => {
-                self.compile_declaration(declaration)?
+                self.debug_statement(statement)?;
+                let name = &declaration.name;
+
+                if let Some(e) = &declaration.expression {
+                    // Store address is pushed onto the stack
+                    self.compile_address(&ast::Expression::new_value(
+                        ast::Value::Identifier(name.to_string(), Rc::clone(&declaration.location)),
+                        declaration.decl_type.to_owned(),
+                    ))?;
+                    self.push();
+
+                    // Value to store is placed in RAX
+                    self.compile_expression(&e)?;
+                    self.compile_store(&declaration.decl_type, 0)?;
+                    self.pop_discard();
+                }
             }
             ast::Statement::Expression(e) => {
                 self.debug_statement(statement)?;
@@ -611,7 +641,8 @@ impl CompilationState {
                     }
                 }
 
-                self.compile_store(&lhs.expr_type)?; // pops the stack
+                self.compile_store(&lhs.expr_type, 0)?;
+                self.pop_discard();
             }
             ast::ExpressionNode::Binary(op, lhs, rhs) => {
                 self.compile_expression(rhs.as_ref())?;
@@ -662,36 +693,49 @@ impl CompilationState {
 
                 self.pop_discard();
             }
-            ast::ExpressionNode::Unary(op, lhs) => {
-                match op {
-                    ast::UnaryOp::Deref => {
-                        self.compile_expression(lhs.as_ref())?;
-                        assemble!(
-                            self,
-                            "mov",
-                            RegisterIndirectLocation::new(result_64),
-                            result_64
-                        )
-                    }
-                    ast::UnaryOp::PostfixIncrement => {
-                        self.compile_address(lhs.as_ref())?;
-                        self.push();
-                        self.compile_load(&expression.expr_type)?;
-                        self.push();
-                        // increment
-                        // get address from stack -> RDI
-                        // store RAX -> RDI
-                        self.pop();
-                        self.pop();
-
-                        todo!()
-                    }
-                    ast::UnaryOp::Negate => {
-                        self.compile_expression(lhs.as_ref())?;
-                        assemble!(self, op_suffix("neg"), result);
-                    }
+            ast::ExpressionNode::Unary(op, lhs) => match op {
+                ast::UnaryOp::Deref => {
+                    self.compile_expression(lhs.as_ref())?;
+                    assemble!(
+                        self,
+                        "mov",
+                        RegisterIndirectLocation::new(result_64),
+                        result_64
+                    )
                 }
-            }
+                ast::UnaryOp::Negate => {
+                    self.compile_expression(lhs.as_ref())?;
+                    assemble!(self, op_suffix("neg"), result);
+                }
+                ast::UnaryOp::PreDecrement | ast::UnaryOp::PreIncrement => {
+                    self.compile_address(lhs)?;
+                    self.push();
+                    self.compile_load(&lhs.expr_type)?;
+                    let op = match op {
+                        ast::UnaryOp::PreDecrement => op_suffix("dec"),
+                        ast::UnaryOp::PreIncrement => op_suffix("inc"),
+                        _ => unreachable!(),
+                    };
+                    assemble!(self, op, result);
+                    self.compile_store(&lhs.expr_type, 0)?;
+                    self.pop_discard();
+                }
+                ast::UnaryOp::PostDecrement | ast::UnaryOp::PostIncrement => {
+                    self.compile_address(lhs)?;
+                    self.push();
+                    self.compile_load(&lhs.expr_type)?;
+                    self.push();
+                    let op = match op {
+                        ast::UnaryOp::PostDecrement => op_suffix("dec"),
+                        ast::UnaryOp::PostIncrement => op_suffix("inc"),
+                        _ => unreachable!(),
+                    };
+                    assemble!(self, op, result);
+                    self.compile_store(&lhs.expr_type, 1)?;
+                    self.pop_reg(result);
+                    self.pop_discard();
+                }
+            },
             ast::ExpressionNode::Conditional(
                 condition_expression,
                 expression_if_true,
@@ -745,11 +789,11 @@ impl CompilationState {
                 if args.len() > platform::ParameterPlacement::max_params() {
                     unimplemented!("too many params for registers");
                 }
-  
+
                 let call_is_vararg = lhs.expr_type.is_vararg_call();
 
                 let mut param_place = platform::ParameterPlacement::default();
-                
+
                 let mut arg_reg = Vec::new();
 
                 for arg in args {
@@ -761,21 +805,21 @@ impl CompilationState {
                         self.compile_expression(arg)?;
                         self.push();
                         match expr_type.size() {
-                            4 | 8 => {},
+                            4 | 8 => {}
                             _ => todo!("Can't call with parameter of this size"),
                         }
                     } else {
                         unimplemented!("argument not passed by register");
                     }
                 }
-                
+
                 // Stack now contains arguments, popping will get them in
                 // reversed order. put each argument in its register
                 for reg in arg_reg.iter().rev() {
                     if let Some(reg) = reg {
-                      self.pop_reg(*reg);
+                        self.pop_reg(*reg);
                     } else {
-                      unimplemented!("argument not passed by register");
+                        unimplemented!("argument not passed by register");
                     }
                 }
 

@@ -54,12 +54,12 @@ impl X86_64Reg {
         assert_ne!(8, self.size());
         use X86_64Reg::*;
         match self {
-            EAX  => RAX,
-            EBX  => RBX,
-            ECX  => RCX,
-            EDX  => RDX,
-            ESI  => RSI,
-            EDI  => RDI,
+            EAX => RAX,
+            EBX => RBX,
+            ECX => RCX,
+            EDX => RDX,
+            ESI => RSI,
+            EDI => RDI,
             _ => unimplemented!("full reg of {} not implemented", self),
         }
     }
@@ -252,11 +252,14 @@ impl ParameterPlacement {
             }
         }
     }
-  
-    /** the number of parameters which can be passed by register */ 
+
+    /** the number of parameters which can be passed by register */
     pub fn max_params() -> usize {
         // this is a temporary limit, other args are passed by stack
-        assert_eq!(INTEGER_64_REGISTER_ORDER.len(), INTEGER_32_REGISTER_ORDER.len());
+        assert_eq!(
+            INTEGER_64_REGISTER_ORDER.len(),
+            INTEGER_32_REGISTER_ORDER.len()
+        );
         INTEGER_64_REGISTER_ORDER.len()
     }
 }
@@ -267,6 +270,13 @@ impl StackRelativeLocation {
             reg: X86_64Reg::RBP,
             offset,
             size,
+        }
+    }
+    pub fn new_with_reg(register: X86_64Reg, offset: i32) -> StackRelativeLocation {
+        StackRelativeLocation {
+            reg: register,
+            offset,
+            size: 8,
         }
     }
     pub fn top(size: usize) -> StackRelativeLocation {

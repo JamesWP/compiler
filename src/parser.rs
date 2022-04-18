@@ -386,6 +386,8 @@ impl ParserState {
         let op = match self.peek_type() {
             Some(ast::TokenType::Minus) => ast::UnaryOp::Negate,
             Some(ast::TokenType::Plus) => todo!(),
+            Some(ast::TokenType::PlusPlus) => ast::UnaryOp::PreIncrement,
+            Some(ast::TokenType::MinusMinus) => ast::UnaryOp::PreDecrement,
             Some(ast::TokenType::Star) => todo!(),
             Some(ast::TokenType::Not) => todo!(),
             _ => {
@@ -429,7 +431,9 @@ impl ParserState {
 
                 value = ast::Expression::new_call(value.into(), argument_expressions)
             } else if self.matches(ast::TokenType::PlusPlus) {
-                value = ast::Expression::new_unaryop(ast::UnaryOp::PostfixIncrement, Box::new(value));
+                value = ast::Expression::new_unaryop(ast::UnaryOp::PostIncrement, Box::new(value))
+            } else if self.matches(ast::TokenType::MinusMinus) {
+                value = ast::Expression::new_unaryop(ast::UnaryOp::PostDecrement, Box::new(value))
             } else {
                 return Ok(value);
             }

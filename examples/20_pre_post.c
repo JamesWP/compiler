@@ -17,5 +17,9 @@ int main(int argc, const char* argv[]) {
 	if (a++ != 1) {return 4;}
 	if (a != 2) {return 5;}
 
+	if (--a != 1) {return 6;}
+	if (a-- != 1) {return 7;}
+	if (a != 0) {return 8;}
+
 	return 0;
 }

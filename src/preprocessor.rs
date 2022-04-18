@@ -702,9 +702,9 @@ impl Input {
                     argument_list.push(Default::default());
                 }
                 Some(ast::TokenType::LParen) => {
-                    let mut tokens = self.parse_matching_pair()?;                    
+                    let mut tokens = self.parse_matching_pair()?;
                     argument_list.last_mut().unwrap().append(&mut tokens);
-                },
+                }
                 Some(ast::TokenType::RParen) => {
                     self.next();
                     break;
@@ -726,9 +726,8 @@ impl Input {
         macro_rules! append_token {
             () => {
                 tokens.push(self.next().unwrap());
-            }
+            };
         }
-
 
         assert_eq!(self.peek_type(), Some(ast::TokenType::LParen));
         append_token!();
