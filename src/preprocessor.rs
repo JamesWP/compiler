@@ -701,7 +701,10 @@ impl Input {
                     self.next();
                     argument_list.push(Default::default());
                 }
-                Some(ast::TokenType::LParen) => todo!(),
+                Some(ast::TokenType::LParen) => {
+                    let mut tokens = self.parse_matching_pair()?;                    
+                    argument_list.last_mut().unwrap().append(&mut tokens);
+                },
                 Some(ast::TokenType::RParen) => {
                     self.next();
                     break;
@@ -715,6 +718,43 @@ impl Input {
         }
 
         Ok(argument_list)
+    }
+
+    fn parse_matching_pair(&mut self) -> std::io::Result<Vec<ast::Token>> {
+        let mut tokens = Vec::new();
+
+        macro_rules! append_token {
+            () => {
+                tokens.push(self.next().unwrap());
+            }
+        }
+
+
+        assert_eq!(self.peek_type(), Some(ast::TokenType::LParen));
+        append_token!();
+
+        loop {
+            match self.peek_type() {
+                Some(ast::TokenType::LParen) => {
+                    let mut nested_tokens = self.parse_matching_pair()?;
+                    tokens.append(&mut nested_tokens);
+                }
+                Some(ast::TokenType::RParen) => {
+                    break;
+                }
+                Some(_) => {
+                    append_token!();
+                }
+                None => {
+                    unimplemented!("unexpected EOF while parsing function like macro arguments");
+                }
+            }
+        }
+
+        assert_eq!(self.peek_type(), Some(ast::TokenType::RParen));
+        append_token!();
+
+        Ok(tokens)
     }
 }
 
