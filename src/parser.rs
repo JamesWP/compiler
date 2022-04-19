@@ -128,55 +128,69 @@ impl ParserState {
             self.input.expect(ast::TokenType::RParen)?;
             let loop_body = Box::new(self.parse_statement()?);
 
-            Ok(ast::Statement::WhileStatement(ast::WhileStatement {
-                condition_expression,
+            Ok(ast::Statement::ForStatement(ast::ForStatement {
+                initialization: ast::ForHead::WithNoExpression,
+                post_iteration_expression: None,
+                control_expression: condition_expression,
                 loop_body,
             }))
         } else if self.matches(ast::TokenType::For) {
             // 6.8.5.3 The for statement
             self.input.expect(ast::TokenType::LParen)?;
-            if is_type_decl(self.peek_type()) {
+
+            let head = if is_type_decl(self.peek_type()) {
                 self.scope.begin_scope()?;
                 // This declares a new variable scoped to the other expressions and the body
-                let declaration_statement = self.parse_declaration()?;
-
-                // This expression will decide if the body will be executed
-                // if this expression evaluates to zero the loop will continue
-                let controlling_expression = if self.matches(ast::TokenType::Semicolon) {
-                    // The expresson was not provided, evaluate to some none zero value
-                    let literal_value = ast::Value::Literal(ast::LiteralValue::Int32(1));
-                    let literal_type = ast::TypeDefinition::INT { size: ast::IntSize::Four, qualifier: ast::TypeQualifier::from(true) };
-                    ast::Expression::new_value(literal_value, literal_type)
-                } else {
-                    let expression = self.parse_expression()?;
-                    self.input.expect(ast::TokenType::Semicolon)?;
-                    expression
-                };
-
-                // This expression is evaluated after each execution of the loop body
-                let post_iteration_expression = if self.matches(ast::TokenType::RParen) {
-                    let literal_value = ast::Value::Literal(ast::LiteralValue::Int32(1));
-                    let literal_type = ast::TypeDefinition::INT { size: ast::IntSize::Four, qualifier: ast::TypeQualifier::from(true) };
-                    ast::Expression::new_value(literal_value, literal_type)
-                } else {
-                    let expression  = self.parse_expression()?;
-                    self.input.expect(ast::TokenType::RParen)?;
-                    expression
-                };
-
-                let loop_body = Box::new(self.parse_statement()?);
-
-                self.scope.end_scope()?;
-
-                Ok(ast::Statement::ForStatement(ast::ForStatement {
-                    initialization: ast::ForHead::WithDeclaration(declaration_statement),
-                    control_expression: controlling_expression, 
-                    post_iteration_expression: Some(post_iteration_expression),
-                    loop_body,
-                }))
+                ast::ForHead::WithDeclaration(self.parse_declaration()?)
             } else {
-                unimplemented!("For loops may not declare a new variable")
+                if self.matches(ast::TokenType::Semicolon) {
+                    ast::ForHead::WithNoExpression
+                } else {
+                    let expr = ast::ForHead::WithExpression(self.parse_expression()?);
+                    assert!(self.matches(ast::TokenType::Semicolon));
+                    expr
+                }
+            };
+
+            // This expression will decide if the body will be executed
+            // if this expression evaluates to zero the loop will continue
+            let controlling_expression = if self.matches(ast::TokenType::Semicolon) {
+                // The expresson was not provided, evaluate to some none zero value
+                let literal_value = ast::Value::Literal(ast::LiteralValue::Int32(1));
+                let literal_type = ast::TypeDefinition::INT { size: ast::IntSize::Four, qualifier: ast::TypeQualifier::from(true) };
+                ast::Expression::new_value(literal_value, literal_type)
+            } else {
+                let expression = self.parse_expression()?;
+                self.input.expect(ast::TokenType::Semicolon)?;
+                expression
+            };
+
+            // This expression is evaluated after each execution of the loop body
+            let post_iteration_expression = if self.matches(ast::TokenType::RParen) {
+                let literal_value = ast::Value::Literal(ast::LiteralValue::Int32(1));
+                let literal_type = ast::TypeDefinition::INT { size: ast::IntSize::Four, qualifier: ast::TypeQualifier::from(true) };
+                ast::Expression::new_value(literal_value, literal_type)
+            } else {
+                let expression  = self.parse_expression()?;
+                self.input.expect(ast::TokenType::RParen)?;
+                expression
+            };
+
+            let loop_body = Box::new(self.parse_statement()?);
+            
+            match &head {
+                ast::ForHead::WithDeclaration(_) => {
+                    self.scope.end_scope()?;
+                },
+                _ => {}
             }
+
+            Ok(ast::Statement::ForStatement(ast::ForStatement {
+                initialization: head,
+                control_expression: controlling_expression, 
+                post_iteration_expression: Some(post_iteration_expression),
+                loop_body,
+            }))
         } else if self.matches(ast::TokenType::If) {
             self.input.expect(ast::TokenType::LParen)?;
             let condition_expression = self.parse_expression()?;

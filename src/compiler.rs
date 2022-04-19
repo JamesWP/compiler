@@ -399,27 +399,6 @@ impl CompilationState {
                 assemble!(self, "cmp", DL::new(0), reg::RAX);
                 assemble!(self, "jnz", &start_label);
             }
-            ast::Statement::WhileStatement(ast::WhileStatement {
-                condition_expression,
-                loop_body,
-            }) => {
-                self.debug_expression("while", condition_expression)?;
-                let start_label = self.labels.allocate_label();
-                let end_label = self.labels.allocate_label();
-                // start_label:
-                self.output_label(&start_label)?;
-                //   evaluate condition
-                self.compile_expression(condition_expression)?;
-                assemble!(self, "cmp", DL::new(0), reg::RAX);
-                assemble!(self, "jz", &end_label);
-                //   if condition is not met jump to end_label
-                //   while body
-                self.compile_statement(loop_body)?;
-                assemble!(self, "jmp", &start_label);
-                //   jump to start
-                // end_label:
-                self.output_label(end_label)?;
-            }
             ast::Statement::ForStatement(ast::ForStatement {
                 initialization,
                 control_expression,
@@ -430,6 +409,10 @@ impl CompilationState {
                     ast::ForHead::WithDeclaration(decl) => {
                         self.compile_declaration(decl)?;
                     },
+                    ast::ForHead::WithExpression(expr) => {
+                        self.compile_expression(expr)?;
+                    },
+                    ast::ForHead::WithNoExpression => {}
                 };
 
                 self.debug_expression("for", control_expression)?;

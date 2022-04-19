@@ -199,7 +199,6 @@ pub enum TypeDefinition {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
     JumpStatement(JumpStatement),
-    WhileStatement(WhileStatement),
     ForStatement(ForStatement),
     DoStatement(Box<Statement>, Option<Expression>),
     IfStatement(IfStatement),
@@ -224,15 +223,10 @@ pub enum JumpStatement {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct WhileStatement {
-    pub condition_expression: Expression,
-    pub loop_body: Box<Statement>,
-}
-
-
-#[derive(Debug, Clone, PartialEq)]
 pub enum ForHead {
-    WithDeclaration(DeclarationStatement)
+    WithDeclaration(DeclarationStatement),
+    WithExpression(Expression),
+    WithNoExpression
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -380,9 +374,6 @@ impl Statement {
             // These statements can contain other statements, visit them
             Statement::DoStatement(w, _) => {
                 w.visit_statements(f);
-            }
-            Statement::WhileStatement(w) => {
-                w.loop_body.visit_statements(f);
             }
             Statement::ForStatement(fr) => {
                 fr.loop_body.visit_statements(f);

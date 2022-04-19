@@ -7,5 +7,14 @@ int main(int argc, const char* argv[]) {
         printf("Val %d\n", acc);
     }
 
-    return 0;
+    for (acc+=100; acc < 1000; acc+=100) {
+        printf("Val %d\n", acc);
+    }
+
+    for (;;) {
+        printf("Val %d\n", acc);
+        return 0;
+    }
+
+    return 1;
 }
