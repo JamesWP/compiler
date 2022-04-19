@@ -566,7 +566,8 @@ impl CompilationState {
 
             // Value to store is placed in RAX
             self.compile_expression(&e)?;
-            self.compile_store(&declaration.decl_type)?; // Stack popped here
+            self.compile_store(&declaration.decl_type, 0)?;
+            self.pop_discard();
         }
 
         Ok(())
