@@ -1,6 +1,7 @@
-use std::collections::{HashMap, VecDeque};
+use core::num::dec2flt::parse;
+use std::{collections::{HashMap, VecDeque}, os::linux::process};
 
-use crate::ast;
+use crate::{ast, parser};
 
 struct Input {
     source: VecDeque<ast::Token>,
@@ -72,10 +73,12 @@ impl Defines {
         }
     }
 
-    fn get_macro(&self, token: &ast::Token) -> Option<(String, &Macro)> {
+    fn get_macro_ignore_hideset(&self, token:&ast::Token) -> Option<(String, &Macro)> {
         let ident_name = match token.tt {
             ast::TokenType::Identifier(ref name) => name,
             _ => {
+                //TODO: check if token is a keyword, and treat it as if it was an identifier. e.g. 'for'
+                
                 // Token isn't an identifier
                 return None;
             }
@@ -83,14 +86,19 @@ impl Defines {
 
         let mcro = self.macros.get(ident_name)?;
 
+        Some((ident_name.to_owned(), mcro))
+    }
+
+    fn get_macro(&self, token: &ast::Token) -> Option<(String, &Macro)> {
+        let (name, mcro) = self.get_macro_ignore_hideset(token)?;
         if let Some(hideset) = &token.hideset {
-            if hideset.contains(ident_name) {
+            if hideset.contains(&name) {
                 // Macro exists but is hiden for this token
                 return None;
             }
         }
 
-        Some((ident_name.to_owned(), mcro))
+        Some((name, mcro))
     }
 
     fn remove_macro(&mut self, macro_name: String) -> std::io::Result<()> {
@@ -149,6 +157,9 @@ pub fn preprocess(
     Ok(state.into())
 }
 
+fn parser_error_to_preprocess_error(s: String) -> std::io::Error {
+    std::io::Error::new(std::io::ErrorKind::Other, s)
+}
 /**
  * 2007 C Draft: http://www.open-std.org/jtc1/sc22/wg14/www/docs/n1256.pdf
  *
@@ -276,22 +287,129 @@ impl State {
                 self.input.next();
                 if self.is_if_section() {
                     // must be 'if-section'
-                    unimplemented!();
+                    self.parse_if_section()?;
                 } else if self.is_control_section() {
                     // must be 'control-section'
                     self.parse_control_line()?;
                 } else {
-                    // must be 'non-directive'
-                    unimplemented!();
+                    // this might be 'endif' 'elif' 'else' in which case we should return
+                    // else must be 'non-directive'
+                    unimplemented!("found non-directive {:?}", self.input.peek_type());
                 }
             }
             Some(_) => {
-                self.parse_text_line()?;
+                let mut processed_tokens = self.parse_text_line()?;
+                self.output.append(&mut processed_tokens);
             }
             None => panic!("group part needs token"),
         }
 
         Ok(())
+    }
+
+    /**
+     *      if-section:
+     *         : if-group elif-groups[opt] else-group[opt] endif-line
+     *         ;
+     */
+    fn parse_if_section(&mut self) -> std::io::Result<()> {
+        let if_group = self.parse_if_group()?;
+        let elif_groups = self.parse_elif_groups()?;
+        let else_group = self.parse_else_group()?;
+        self.parse_endif_line()?;
+
+        // Evaluate the expressions and enqueue back the tokens
+        todo!();
+    }
+
+    /**
+     *      if-group:
+     *         : # if constant-expression new-line group[opt]
+     *         | # ifdef identifier new-line group[opt]
+     *         | # ifndef identifier new-line group[opt]
+     *         ;
+     */
+    fn parse_if_group(&mut self) -> std::io::Result<(ast::Expression, Vec<ast::Token>)> {
+        match self.input.peek_type() {
+            Some(ast::TokenType::If) => {
+                self.input.next();
+                // check for 'if' parse expression from line
+                let processed_tokens = self.parse_text_line()?;
+
+                for token in &processed_tokens {
+                    // find defined ( A ) and defined A and replace with 1 or 0
+                    if let ast::TokenType::Identifier(id) = &token.tt {
+                        if id == "defined" {
+                            todo!("support defined");
+                        }
+                    }
+                }
+
+                // All remaining identifiers are replaced with 0
+                // TODO: (including those lexically identical to keywords) 
+                let processed_tokens:Vec<_> = processed_tokens.into_iter().map(|token| {
+                    if !matches!(&token.tt, ast::TokenType::Identifier(_) ){
+                        token
+                    } else if self.defines.get_macro_ignore_hideset(&token).is_none() {
+                        ast::Token::from(ast::TokenType::Value(0))
+                    } else {
+                        token
+                    }
+                }).collect();
+
+                let parser_input = parser::ParserInput::from(processed_tokens);
+                let parser = parser::ParserState::new(parser_input);
+                let expression = parser.parse_conditional_expression().map_err(parser_error_to_preprocess_error)?;
+
+                let group = self.parse_group()?;
+
+                Ok((expression, group))
+            },
+            Some(ast::TokenType::Identifier(ident)) => {
+                match ident.as_str() {
+                    "ifdef" => {
+                        todo!()
+                    },
+                    "ifndef" => {
+                        todo!()
+                    },
+                    _ => {
+                        todo!()
+                    }
+                }    
+            },
+            _ => {
+                todo!();
+            }
+        };
+    }
+
+    /**
+     *      elif-groups:
+     *         : elif-group
+     *         | elif-groups elif-group
+     *         ;
+     */
+    fn parse_elif_groups(&mut self) -> std::io::Result<Vec<(ast::Expression, Vec<ast::Token>)>> {
+        todo!();
+    }
+
+    /**
+     *      else-group:
+     *         : # else new-line group[opt]
+     *         ;
+     */
+    fn parse_else_group(&mut self) -> std::io::Result<(ast::Expression, Vec<ast::Token>)> {
+        todo!();
+    }
+
+    /**
+     *      endif-line:
+     *         : # endif new-line
+     *         ;
+     */
+    fn parse_endif_line(&mut self) -> std::io::Result<()> {
+        todo!();
     }
 
     /**
@@ -435,17 +553,19 @@ impl State {
      *         | pp-tokens preprocessing-token
      *         ;
      */
-    fn parse_text_line(&mut self) -> std::io::Result<()> {
+    fn parse_text_line(&mut self) -> std::io::Result<Vec<ast::Token>> {
+        let mut tokens = Vec::new();
+
         while self.is_preprocessing_token() {
             let token = self.input.next().unwrap();
-            self.emit(token)?;
+            self.emit(token, &mut tokens)?;
 
             if self.is_new_line() {
                 break;
             }
         }
 
-        Ok(())
+        Ok(tokens)
     }
 
     /**
@@ -539,6 +659,7 @@ impl State {
                 let ident = ident.to_lowercase();
                 ident == "if" || ident == "ifdef" || ident == "ifndef"
             }
+            Some(ast::TokenType::If) =>  true,
             _ => false,
         }
     }
@@ -590,7 +711,7 @@ impl State {
     /**
      * expand and emit
      */
-    fn emit(&mut self, token: ast::Token) -> std::io::Result<()> {
+    fn emit(&mut self, token: ast::Token, output: &mut Vec<ast::Token>) -> std::io::Result<()> {
         let instance_token = |new_token: &ast::Token, source_token: &ast::Token, name: &String| {
             let mut new_token = new_token.clone();
             new_token.token_start = source_token.token_start;
@@ -662,7 +783,7 @@ impl State {
                 }
             }
         } else {
-            self.output.push(token);
+            output.push(token);
         }
 
         Ok(())

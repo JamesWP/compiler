@@ -274,7 +274,7 @@ impl ParserState {
         }
     }
 
-    fn parse_conditional_expression(&mut self) -> ParseResult<ast::Expression> {
+    pub fn parse_conditional_expression(&mut self) -> ParseResult<ast::Expression> {
         let mut equality_expression = self.parse_equality_expression()?;
 
         if self.matches(ast::TokenType::Question) {
@@ -521,7 +521,7 @@ impl ParserState {
         Ok(expr)
     }
 
-    pub fn parse_argument_expression_list(&mut self) -> ParseResult<Vec<ast::Expression>> {
+    fn parse_argument_expression_list(&mut self) -> ParseResult<Vec<ast::Expression>> {
         let mut args = vec![];
         loop {
             if self.peek_type() == Some(ast::TokenType::RParen) {

@@ -180,4 +180,5 @@ mod compiler_unit_tests {
     compile!(compare example_19 "19_pp_macro");
     compile!(compare example_20 "20_bug");
     compile!(compare example_21 "21_pre_post");
+    compile!(compare example_22 "22_pp_conditions");
 } // mod compiler_unit_tests

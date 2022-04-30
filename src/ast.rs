@@ -27,7 +27,6 @@ impl Default for Token {
     }
 }
 
-#[cfg(test)]
 impl From<TokenType> for Token {
     fn from(tt: TokenType) -> Self {
         Token {
