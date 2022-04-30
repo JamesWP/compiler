@@ -1,7 +1,6 @@
-use core::num::dec2flt::parse;
-use std::{collections::{HashMap, VecDeque}, os::linux::process};
+use std::collections::{HashMap, VecDeque};
 
-use crate::{ast, parser};
+use crate::{ast, constexpr, parser};
 
 struct Input {
     source: VecDeque<ast::Token>,
@@ -73,7 +72,7 @@ impl Defines {
         }
     }
 
-    fn get_macro_ignore_hideset(&self, token:&ast::Token) -> Option<(String, &Macro)> {
+    fn get_macro_ignore_hideset(&self, token: &ast::Token) -> Option<(String, &Macro)> {
         let ident_name = match token.tt {
             ast::TokenType::Identifier(ref name) => name,
             _ => {
@@ -260,6 +259,8 @@ impl State {
     }
 
     /**
+     * N.B. This accepts an optional group, there might not be any group here
+     *
      *      group:
      *         : group-part
      *         | group group-part
@@ -308,6 +309,8 @@ impl State {
     }
 
     /**
+     * N.B. the '#' has already been popped
+     *
      *      if-section:
      *         : if-group elif-groups[opt] else-group[opt] endif-line
      *         ;
@@ -334,6 +337,8 @@ impl State {
             Some(ast::TokenType::If) => {
                 self.input.next();
                 // check for 'if' parse expression from line
+
+    fn parse_constant_expression(&mut self) -> std::io::Result<ast::Expression> {
                 let processed_tokens = self.parse_text_line()?;
 
                 for token in &processed_tokens {
@@ -347,47 +352,38 @@ impl State {
 
                 // All remaining identifiers are replaced with 0
                 // TODO: (including those lexically identical to keywords) 
-                let processed_tokens:Vec<_> = processed_tokens.into_iter().map(|token| {
-                    if !matches!(&token.tt, ast::TokenType::Identifier(_) ){
+        let processed_tokens: Vec<_> = processed_tokens
+            .into_iter()
+            .map(|token| {
+                if !matches!(&token.tt, ast::TokenType::Identifier(_)) {
                         token
                     } else if self.defines.get_macro_ignore_hideset(&token).is_none() {
                         ast::Token::from(ast::TokenType::Value(0))
                     } else {
                         token
                     }
-                }).collect();
+            })
+            .collect();
 
                 let parser_input = parser::ParserInput::from(processed_tokens);
-                let parser = parser::ParserState::new(parser_input);
-                let expression = parser.parse_conditional_expression().map_err(parser_error_to_preprocess_error)?;
+        let mut parser = parser::ParserState::new(parser_input);
+        let expression = parser
+            .parse_conditional_expression()
+            .map_err(parser_error_to_preprocess_error)?;
 
-                let group = self.parse_group()?;
-
-                Ok((expression, group))
-            },
-            Some(ast::TokenType::Identifier(ident)) => {
-                match ident.as_str() {
-                    "ifdef" => {
-                        todo!()
-                    },
-                    "ifndef" => {
-                        todo!()
-                    },
-                    _ => {
-                        todo!()
-                    }
-                }    
-            },
-            _ => {
-                todo!();
-            }
-        };
+        Ok(expression)
     }
 
     /**
+     * N.B. the '#' has already been consumed
+     *
      *      elif-groups:
      *         : elif-group
      *         | elif-groups elif-group
+     *         ;
+     *
+     *      elif-group:
+     *         : # elif constant-expression new-line group[opt]
      *         ;
      */
     fn parse_elif_groups(&mut self) -> std::io::Result<Vec<(ast::Expression, Vec<ast::Token>)>> {
@@ -659,7 +655,7 @@ impl State {
                 let ident = ident.to_lowercase();
                 ident == "if" || ident == "ifdef" || ident == "ifndef"
             }
-            Some(ast::TokenType::If) =>  true,
+            Some(ast::TokenType::If) => true,
             _ => false,
         }
     }
@@ -688,6 +684,29 @@ impl State {
                     || ident == "error"
                     || ident == "pragma"
             }
+            _ => false,
+        }
+    }
+
+    fn is_directive(&self) -> bool {
+        if self.is_new_line() {
+            return true;
+        }
+
+        if self.is_control_section() {
+            return true;
+        }
+
+        if self.is_if_section() {
+            return true;
+        }
+
+        match self.input.peek_type() {
+            Some(ast::TokenType::Identifier(ident)) => {
+                let ident = ident.to_lowercase();
+                ident == "elif" || ident == "endif"
+            }
+            Some(ast::TokenType::Else) => true,
             _ => false,
         }
     }
