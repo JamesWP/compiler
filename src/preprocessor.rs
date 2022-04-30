@@ -265,16 +265,7 @@ impl State {
      *         : group-part
      *         | group group-part
      *         ;
-     */
-    fn parse_group(&mut self) -> std::io::Result<()> {
-        while let Some(_) = self.input.peek() {
-            self.parse_group_part()?;
-        }
-
-        Ok(())
-    }
-
-    /**
+     *
      *      group-part:
      *         : if-section
      *         | control-line
@@ -282,7 +273,8 @@ impl State {
      *         | # non-directive
      *         ;
      */
-    fn parse_group_part(&mut self) -> std::io::Result<()> {
+    fn parse_group(&mut self) -> std::io::Result<()> {
+        loop {
         match self.input.peek_type() {
             Some(ast::TokenType::Hash) => {
                 self.input.next();
@@ -293,16 +285,17 @@ impl State {
                     // must be 'control-section'
                     self.parse_control_line()?;
                 } else {
-                    // this might be 'endif' 'elif' 'else' in which case we should return
-                    // else must be 'non-directive'
+                        // must be 'non-directive'
                     unimplemented!("found non-directive {:?}", self.input.peek_type());
                 }
             }
             Some(_) => {
-                let mut processed_tokens = self.parse_text_line()?;
-                self.output.append(&mut processed_tokens);
+                    self.parse_text_line()?;
             }
-            None => panic!("group part needs token"),
+                None => {
+                    break;
+                }
+            };
         }
 
         Ok(())
@@ -316,16 +309,36 @@ impl State {
      *         ;
      */
     fn parse_if_section(&mut self) -> std::io::Result<()> {
-        let if_group = self.parse_if_group()?;
+        let (if_condition, if_group) = self.parse_if_group()?;
+
+        // at this point we must have hit either an elif, else, or endif
+        // N.B. the '#' has already been consumed!
+
         let elif_groups = self.parse_elif_groups()?;
         let else_group = self.parse_else_group()?;
         self.parse_endif_line()?;
 
         // Evaluate the expressions and enqueue back the tokens
-        todo!();
+        if constexpr::evaluate_condition_expression(&if_condition)? {
+            self.input.unget(if_group);
+            return Ok(());
+        }
+
+        for (elif_condition, elif_group) in elif_groups {
+            if constexpr::evaluate_condition_expression(&elif_condition)? {
+                self.input.unget(elif_group);
+                return Ok(());
+            }
+        }
+
+        self.input.unget(else_group);
+
+        Ok(())
     }
 
     /**
+     * N.B. the '#' has already been popped
+     *
      *      if-group:
      *         : # if constant-expression new-line group[opt]
      *         | # ifdef identifier new-line group[opt]
@@ -337,6 +350,74 @@ impl State {
             Some(ast::TokenType::If) => {
                 self.input.next();
                 // check for 'if' parse expression from line
+
+                let expression = self.parse_constant_expression()?;
+                let group = self.skip_group()?;
+
+                Ok((expression, group))
+            }
+            Some(ast::TokenType::Identifier(ident)) => match ident.as_str() {
+                //TODO: combine ifdef and ifndef
+                "ifdef" => {
+                    let ident = self.input.next().unwrap();
+
+                    match ident.tt {
+                        ast::TokenType::Identifier(_) => {}
+                        _ => unimplemented!("ifdef must be followed by identifier"),
+                    };
+
+                    let value = match self.defines.get_macro_ignore_hideset(&ident) {
+                        Some(_) => 1,
+                        None => 0,
+                    };
+
+                    let value = ast::Value::Literal(ast::LiteralValue::Int32(value));
+                    let expr_type = ast::TypeDefinition::INT {
+                        size: ast::IntSize::Four,
+                        qualifier: ast::TypeQualifier::from(true),
+                    };
+
+                    let expression = ast::Expression::new_value(value, expr_type);
+
+                    let group = self.skip_group()?;
+
+                    Ok((expression, group))
+                }
+                "ifndef" => {
+                    self.input.next();
+                    let ident = self.input.next().unwrap();
+
+                    match ident.tt {
+                        ast::TokenType::Identifier(_) => {}
+                        _ => unimplemented!("ifdef must be followed by identifier"),
+                    };
+
+                    let value = match self.defines.get_macro_ignore_hideset(&ident) {
+                        Some(_) => 0,
+                        None => 1,
+                    };
+
+                    let value = ast::Value::Literal(ast::LiteralValue::Int32(value));
+                    let expr_type = ast::TypeDefinition::INT {
+                        size: ast::IntSize::Four,
+                        qualifier: ast::TypeQualifier::from(true),
+                    };
+
+                    let expression = ast::Expression::new_value(value, expr_type);
+
+                    let group = self.skip_group()?;
+
+                    Ok((expression, group))
+                }
+                _ => {
+                    todo!()
+                }
+            },
+            _ => {
+                todo!()
+            }
+        }
+    }
 
     fn parse_constant_expression(&mut self) -> std::io::Result<ast::Expression> {
                 let processed_tokens = self.parse_text_line()?;
@@ -387,7 +468,30 @@ impl State {
      *         ;
      */
     fn parse_elif_groups(&mut self) -> std::io::Result<Vec<(ast::Expression, Vec<ast::Token>)>> {
-        todo!();
+        let mut groups = Vec::new();
+
+        loop {
+            match self.input.peek_type() {
+                Some(ast::TokenType::Identifier(name)) => {
+                    if name != "elif" {
+                        break;
+                    }
+
+                    // pop the 'elif'
+                    self.input.next();
+
+                    let expression = self.parse_constant_expression()?;
+                    let group = self.skip_group()?;
+
+                    groups.push((expression, group));
+                }
+                _ => {
+                    break;
+                }
+            }
+        }
+
+        Ok(groups)
     }
 
     /**
@@ -395,8 +499,18 @@ impl State {
      *         : # else new-line group[opt]
      *         ;
      */
-    fn parse_else_group(&mut self) -> std::io::Result<(ast::Expression, Vec<ast::Token>)> {
-        todo!();
+    fn parse_else_group(&mut self) -> std::io::Result<Vec<ast::Token>> {
+        match self.input.peek_type() {
+            Some(ast::TokenType::Else) => {
+                // pop the 'else'
+                self.input.next();
+
+                let group = self.skip_group()?;
+
+                Ok(group)
+            }
+            _ => Ok(Vec::new()),
+        }
     }
 
     /**
@@ -405,7 +519,16 @@ impl State {
      *         ;
      */
     fn parse_endif_line(&mut self) -> std::io::Result<()> {
-        todo!();
+        match self.input.peek_type() {
+            Some(ast::TokenType::Identifier(name)) => {
+                if name != "endif" {
+                    unimplemented!();
+                }
+                self.input.next();
+                Ok(())
+            }
+            _ => unimplemented!(),
+        }
     }
 
     /**
@@ -709,6 +832,14 @@ impl State {
             Some(ast::TokenType::Else) => true,
             _ => false,
         }
+    }
+
+    /**
+     * assuming we have just entered a #if, #elif, #ifdef, #ifndef section
+     * skip till the next corresponding #elif, #else, #endif
+     */
+    fn skip_group(&self) -> std::io::Result<Vec<ast::Token>> {
+        todo!()
     }
 }
 
