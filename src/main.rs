@@ -1,5 +1,6 @@
 mod ast;
 mod compiler;
+mod constexpr;
 mod examples;
 mod intern;
 mod labels;

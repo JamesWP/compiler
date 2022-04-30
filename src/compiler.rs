@@ -292,14 +292,14 @@ impl CompilationState {
     }
 
     /**
-     load a value into RAX from the address pointed to by RAX
-      
-     input:
-       RAX: Pointer to value
-     
-     output:
-       RAX: Value
-     */
+    load a value into RAX from the address pointed to by RAX
+
+    input:
+      RAX: Pointer to value
+
+    output:
+      RAX: Value
+    */
     fn compile_load(&mut self, type_def: &ast::TypeDefinition) -> std::io::Result<()> {
         let load_size = type_def.size();
         match type_def {
@@ -441,10 +441,10 @@ impl CompilationState {
                 match &initialization {
                     ast::ForHead::WithDeclaration(decl) => {
                         self.compile_declaration(decl)?;
-                    },
+                    }
                     ast::ForHead::WithExpression(expr) => {
                         self.compile_expression(expr)?;
-                    },
+                    }
                     ast::ForHead::WithNoExpression => {}
                 };
 
@@ -552,7 +552,10 @@ impl CompilationState {
         Ok(())
     }
 
-    fn compile_declaration(&mut self, declaration: &ast::DeclarationStatement) -> std::io::Result<()> {
+    fn compile_declaration(
+        &mut self,
+        declaration: &ast::DeclarationStatement,
+    ) -> std::io::Result<()> {
         let name = &declaration.name;
 
         if let Some(e) = &declaration.expression {

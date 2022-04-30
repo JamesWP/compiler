@@ -226,7 +226,7 @@ pub enum JumpStatement {
 pub enum ForHead {
     WithDeclaration(DeclarationStatement),
     WithExpression(Expression),
-    WithNoExpression
+    WithNoExpression,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -461,7 +461,10 @@ impl FunctionDefinition {
             Statement::DeclarationStatement(d) => {
                 declarations.push(d.clone());
             }
-            Statement::ForStatement(ForStatement{initialization:ForHead::WithDeclaration(d), ..}) => {
+            Statement::ForStatement(ForStatement {
+                initialization: ForHead::WithDeclaration(d),
+                ..
+            }) => {
                 declarations.push(d.clone());
             }
             _ => {}

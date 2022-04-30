@@ -157,7 +157,10 @@ impl ParserState {
             let controlling_expression = if self.matches(ast::TokenType::Semicolon) {
                 // The expresson was not provided, evaluate to some none zero value
                 let literal_value = ast::Value::Literal(ast::LiteralValue::Int32(1));
-                let literal_type = ast::TypeDefinition::INT { size: ast::IntSize::Four, qualifier: ast::TypeQualifier::from(true) };
+                let literal_type = ast::TypeDefinition::INT {
+                    size: ast::IntSize::Four,
+                    qualifier: ast::TypeQualifier::from(true),
+                };
                 ast::Expression::new_value(literal_value, literal_type)
             } else {
                 let expression = self.parse_expression()?;
@@ -168,26 +171,29 @@ impl ParserState {
             // This expression is evaluated after each execution of the loop body
             let post_iteration_expression = if self.matches(ast::TokenType::RParen) {
                 let literal_value = ast::Value::Literal(ast::LiteralValue::Int32(1));
-                let literal_type = ast::TypeDefinition::INT { size: ast::IntSize::Four, qualifier: ast::TypeQualifier::from(true) };
+                let literal_type = ast::TypeDefinition::INT {
+                    size: ast::IntSize::Four,
+                    qualifier: ast::TypeQualifier::from(true),
+                };
                 ast::Expression::new_value(literal_value, literal_type)
             } else {
-                let expression  = self.parse_expression()?;
+                let expression = self.parse_expression()?;
                 self.input.expect(ast::TokenType::RParen)?;
                 expression
             };
 
             let loop_body = Box::new(self.parse_statement()?);
-            
+
             match &head {
                 ast::ForHead::WithDeclaration(_) => {
                     self.scope.end_scope()?;
-                },
+                }
                 _ => {}
             }
 
             Ok(ast::Statement::ForStatement(ast::ForStatement {
                 initialization: head,
-                control_expression: controlling_expression, 
+                control_expression: controlling_expression,
                 post_iteration_expression: Some(post_iteration_expression),
                 loop_body,
             }))
@@ -237,7 +243,8 @@ impl ParserState {
             let expression = self.parse_expression()?;
             self.input.expect(ast::TokenType::Semicolon)?;
             Ok(ast::DeclarationStatement::new_with_expression(
-                    decl_type, name, expression, location))
+                decl_type, name, expression, location,
+            ))
         }
     }
 
