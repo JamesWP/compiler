@@ -77,7 +77,7 @@ impl Defines {
             ast::TokenType::Identifier(ref name) => name,
             _ => {
                 //TODO: check if token is a keyword, and treat it as if it was an identifier. e.g. 'for'
-                
+
                 // Token isn't an identifier
                 return None;
             }
@@ -251,7 +251,7 @@ impl State {
      *         ;
      */
     fn parse_preprocessing_file(&mut self) -> std::io::Result<()> {
-        if let Some(_) = self.input.peek() {
+        if self.input.peek().is_some() {
             self.parse_group()?;
         }
 
@@ -275,23 +275,24 @@ impl State {
      */
     fn parse_group(&mut self) -> std::io::Result<()> {
         loop {
-        match self.input.peek_type() {
-            Some(ast::TokenType::Hash) => {
-                self.input.next();
-                if self.is_if_section() {
-                    // must be 'if-section'
-                    self.parse_if_section()?;
-                } else if self.is_control_section() {
-                    // must be 'control-section'
-                    self.parse_control_line()?;
-                } else {
+            match self.input.peek_type() {
+                Some(ast::TokenType::Hash) => {
+                    self.input.next();
+                    if self.is_if_section() {
+                        // must be 'if-section'
+                        self.parse_if_section()?;
+                    } else if self.is_control_section() {
+                        // must be 'control-section'
+                        self.parse_control_line()?;
+                    } else {
                         // must be 'non-directive'
-                    unimplemented!("found non-directive {:?}", self.input.peek_type());
+                        unimplemented!("found non-directive {:?}", self.input.peek_type());
+                    }
                 }
-            }
-            Some(_) => {
-                    self.parse_text_line()?;
-            }
+                Some(_) => {
+                    let mut processed_tokens = self.parse_text_line()?;
+                    self.output.append(&mut processed_tokens);
+                }
                 None => {
                     break;
                 }
@@ -420,33 +421,33 @@ impl State {
     }
 
     fn parse_constant_expression(&mut self) -> std::io::Result<ast::Expression> {
-                let processed_tokens = self.parse_text_line()?;
+        let processed_tokens = self.parse_text_line()?;
 
-                for token in &processed_tokens {
-                    // find defined ( A ) and defined A and replace with 1 or 0
-                    if let ast::TokenType::Identifier(id) = &token.tt {
-                        if id == "defined" {
-                            todo!("support defined");
-                        }
-                    }
+        for token in &processed_tokens {
+            // find defined ( A ) and defined A and replace with 1 or 0
+            if let ast::TokenType::Identifier(id) = &token.tt {
+                if id == "defined" {
+                    todo!("support defined");
                 }
+            }
+        }
 
-                // All remaining identifiers are replaced with 0
-                // TODO: (including those lexically identical to keywords) 
+        // All remaining identifiers are replaced with 0
+        // TODO: (including those lexically identical to keywords)
         let processed_tokens: Vec<_> = processed_tokens
             .into_iter()
             .map(|token| {
                 if !matches!(&token.tt, ast::TokenType::Identifier(_)) {
-                        token
-                    } else if self.defines.get_macro_ignore_hideset(&token).is_none() {
-                        ast::Token::from(ast::TokenType::Value(0))
-                    } else {
-                        token
-                    }
+                    token
+                } else if self.defines.get_macro_ignore_hideset(&token).is_none() {
+                    ast::Token::from(ast::TokenType::Value(0))
+                } else {
+                    token
+                }
             })
             .collect();
 
-                let parser_input = parser::ParserInput::from(processed_tokens);
+        let parser_input = parser::ParserInput::from(processed_tokens);
         let mut parser = parser::ParserState::new(parser_input);
         let expression = parser
             .parse_conditional_expression()
