@@ -447,6 +447,10 @@ impl State {
             })
             .collect();
 
+        if processed_tokens.len() == 0 {
+            unimplemented!("If with no expression");
+        }
+
         let parser_input = parser::ParserInput::from(processed_tokens);
         let mut parser = parser::ParserState::new(parser_input);
         let expression = parser
@@ -676,7 +680,7 @@ impl State {
     fn parse_text_line(&mut self) -> std::io::Result<Vec<ast::Token>> {
         let mut tokens = Vec::new();
 
-        while self.is_preprocessing_token() {
+        loop {
             let token = self.input.next().unwrap();
             self.emit(token, &mut tokens)?;
 
@@ -700,7 +704,7 @@ impl State {
      */
     fn parse_replacement_list(&mut self) -> std::io::Result<Vec<ast::Token>> {
         let mut tokens = Vec::new();
-        while self.is_preprocessing_token() {
+        while !self.is_new_line() {
             let token = self.input.next().unwrap();
             tokens.push(token);
 
@@ -759,10 +763,6 @@ impl State {
         }
     }
 
-    fn is_preprocessing_token(&self) -> bool {
-        true
-    }
-
     /**
      *
      *  # if ..  
@@ -812,25 +812,6 @@ impl State {
         }
     }
 
-    fn is_directive(&self) -> bool {
-        if self.is_control_section() {
-            return true;
-        }
-
-        if self.is_if_section() {
-            return true;
-        }
-
-        match self.input.peek_type() {
-            Some(ast::TokenType::Identifier(ident)) => {
-                let ident = ident.to_lowercase();
-                ident == "elif" || ident == "endif"
-            }
-            Some(ast::TokenType::Else) => true,
-            _ => false,
-        }
-    }
-
     /**
      * assuming we have just entered a #if, #elif, #ifdef, #ifndef section
      * skip till the next corresponding #elif, #else, #endif
@@ -859,34 +840,73 @@ impl State {
                         // must be 'if-section'
                         let mut if_section = self.skip_if_section()?;
                         tokens.append(&mut if_section);
+                        continue;
                     } else if self.input.peek_type() == Some(ast::TokenType::Else) {
-                        todo!()
+                        break Ok(tokens);
                     } else if let Some(ast::TokenType::Identifier(name)) = self.input.peek_type() {
                         if name == "elif" || name == "endif" {
-                            todo!()
-                        } else {
-                            skip!(line);
-                        }
-                    } else {
-                        skip!(line);
+                            break Ok(tokens);
+                        } 
                     }
                 }
-                Some(_) => {
-                    skip!(line);
-                }
-                None => {
-                    unimplemented!("unable to find end of group");
-                }
+                Some(_) => { }
+                None => { unimplemented!("unable to find end of group"); }
             };
+            
+            skip!(line);
         }
     }
 
     fn skip_text_line(&mut self) -> std::io::Result<Vec<ast::Token>> {
-        todo!()
+        let mut tokens = Vec::new();
+
+        loop {
+            tokens.push(self.input.next().unwrap());
+            if self.is_new_line() {
+                break Ok(tokens);
+            }
+        }
     }
 
+    // Skip tokens till we get to the endif
+    // If we encounter another #if then we call outselves
     fn skip_if_section(&mut self) -> std::io::Result<Vec<ast::Token>> {
-        todo!()
+        let mut tokens = Vec::new();
+
+        macro_rules! skip {
+            (token) => {
+                tokens.push(self.input.next().unwrap());
+            };
+            (line) => {
+                let mut processed_tokens = self.skip_text_line()?;
+                tokens.append(&mut processed_tokens);
+            }
+        }
+
+        loop {
+            match self.input.peek_type() {
+                Some(ast::TokenType::Hash) => {
+                    skip!(token);
+                    // test to see if this is #if or #endif
+
+                    if self.is_if_section() {
+                        // must be 'if-section'
+                        let mut if_section = self.skip_if_section()?;
+                        tokens.append(&mut if_section);
+                        continue;
+                    } else if let Some(ast::TokenType::Identifier(name)) = self.input.peek_type() {
+                        if name == "endif" {
+                            skip!(line);
+                            break Ok(tokens);
+                        } 
+                    }
+                }
+                Some(_) => { }
+                None => { unimplemented!("unable to find end of group"); }
+            };
+
+            skip!(line);
+        }
     }
 }
 
@@ -1123,6 +1143,10 @@ mod test {
         let tokens = test_preprocessor("#define A B\nA A");
 
         token_eq!(tokens, tok!(id B) tok!(id B));
+
+        let tokens = test_preprocessor("#define A\n B");
+
+        token_eq!(tokens, tok!(id B));
     }
 
     #[test]
@@ -1131,4 +1155,22 @@ mod test {
 
         token_eq!(tokens, tok!(id A) tok!(id B));
     }
+
+    #[test]
+    fn test_conditional() {
+        let tokens = test_preprocessor("
+            #define DEF 1
+            A
+            #if DEF
+              BCD
+              #if 0
+                NOP
+              #endif
+            #endif
+            E
+        ");
+
+        token_eq!(tokens, tok!(id A) tok!(id BCD) tok!(id E));
+    }
+
 }
