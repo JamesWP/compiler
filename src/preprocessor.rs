@@ -813,10 +813,6 @@ impl State {
     }
 
     fn is_directive(&self) -> bool {
-        if self.is_new_line() {
-            return true;
-        }
-
         if self.is_control_section() {
             return true;
         }
@@ -838,8 +834,58 @@ impl State {
     /**
      * assuming we have just entered a #if, #elif, #ifdef, #ifndef section
      * skip till the next corresponding #elif, #else, #endif
+     *
+     * if we detect any #if #ifdef #ifndef section we must also skip that
      */
-    fn skip_group(&self) -> std::io::Result<Vec<ast::Token>> {
+    fn skip_group(&mut self) -> std::io::Result<Vec<ast::Token>> {
+        let mut tokens = Vec::new();
+
+        macro_rules! skip {
+            (token) => {
+                tokens.push(self.input.next().unwrap());
+            };
+            (line) => {
+                let mut processed_tokens = self.skip_text_line()?;
+                tokens.append(&mut processed_tokens);
+            }
+        }
+
+        loop {
+            match self.input.peek_type() {
+                Some(ast::TokenType::Hash) => {
+                    skip!(token);
+
+                    if self.is_if_section() {
+                        // must be 'if-section'
+                        let mut if_section = self.skip_if_section()?;
+                        tokens.append(&mut if_section);
+                    } else if self.input.peek_type() == Some(ast::TokenType::Else) {
+                        todo!()
+                    } else if let Some(ast::TokenType::Identifier(name)) = self.input.peek_type() {
+                        if name == "elif" || name == "endif" {
+                            todo!()
+                        } else {
+                            skip!(line);
+                        }
+                    } else {
+                        skip!(line);
+                    }
+                }
+                Some(_) => {
+                    skip!(line);
+                }
+                None => {
+                    unimplemented!("unable to find end of group");
+                }
+            };
+        }
+    }
+
+    fn skip_text_line(&mut self) -> std::io::Result<Vec<ast::Token>> {
+        todo!()
+    }
+
+    fn skip_if_section(&mut self) -> std::io::Result<Vec<ast::Token>> {
         todo!()
     }
 }
