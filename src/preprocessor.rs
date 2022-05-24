@@ -1,6 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 
-use crate::{ast, constexpr, parser};
+use crate::{ast, constexpr, parser, lexer::{LexResult, LexError}};
 
 struct Input {
     source: VecDeque<ast::Token>,
@@ -24,7 +24,7 @@ struct State {
     input: Input,
     output: Vec<ast::Token>,
     defines: Defines,
-    lex_file_fn: fn(&str) -> std::io::Result<Vec<ast::Token>>,
+    lex_file_fn: fn(&str) -> LexResult<Vec<ast::Token>>,
 }
 
 impl Default for Defines {
@@ -32,6 +32,12 @@ impl Default for Defines {
         Self {
             macros: Default::default(),
         }
+    }
+}
+
+impl From<LexError> for std::io::Error {
+    fn from(e: LexError) -> Self {
+        todo!("Err: {}", e)
     }
 }
 
@@ -147,7 +153,7 @@ impl Into<Vec<ast::Token>> for State {
 
 pub fn preprocess(
     tokens: Vec<ast::Token>,
-    lex_file: fn(&str) -> std::io::Result<Vec<ast::Token>>,
+    lex_file: fn(&str) -> LexResult<Vec<ast::Token>>,
 ) -> std::io::Result<Vec<ast::Token>> {
     let mut state = State::new(tokens, lex_file);
 
@@ -916,7 +922,7 @@ impl State {
 impl State {
     fn new(
         tokens: Vec<ast::Token>,
-        lex_file: fn(&str) -> std::io::Result<Vec<ast::Token>>,
+        lex_file: fn(&str) -> LexResult<Vec<ast::Token>>,
     ) -> Self {
         Self {
             input: tokens.into(),
@@ -1099,11 +1105,17 @@ impl Input {
 mod test {
     use crate::ast::TokenType::*;
     use crate::ast::{Token, TokenType};
-    use crate::lexer::lex_string;
+    use crate::lexer::{LexResult, Lexer};
     use crate::preprocessor::preprocess;
+    use crate::source::Source;
 
-    fn noop_load(_: &str) -> std::io::Result<Vec<Token>> {
+    fn noop_load(_: &str) -> LexResult<Vec<Token>> {
         panic!("no loads expected");
+    }
+
+    fn lex_string(s: &str) -> Vec<Token> {
+        let source = Source::new_from_string(s, "test");
+        Lexer::new(source).lex().unwrap()
     }
 
     // Token list equality
@@ -1120,7 +1132,7 @@ mod test {
     }
 
     fn test_preprocessor(input: &str) -> Vec<TokenType> {
-        let tokens = lex_string(String::from(input), "-").unwrap();
+        let tokens = lex_string(input);
         let tokens = preprocess(tokens, noop_load).unwrap();
 
         tokens.into_iter().map(|t| t.tt).collect()

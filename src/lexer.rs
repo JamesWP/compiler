@@ -1,24 +1,22 @@
-use std::io::Read;
+use std::{fmt::Display, num::ParseIntError};
 
-use crate::ast::{Token, TokenType};
+use crate::{ast::{Token, TokenType}, source::{SourceFile, Source, SourceError}};
 
 struct LexerInput {
-    source: Vec<char>,
+    source: SourceFile,
     pos: usize,
     line: usize,
     column: usize,
-    /* lines: Vec<String>,
-     */
 }
 
 impl LexerInput {
     pub fn peek(&self) -> Option<char> {
-        self.source.get(self.pos).cloned()
+        self.source.get(self.pos)
     }
 
     pub fn next(&mut self) -> char {
         self.pos += 1;
-        let c = *self.source.get(self.pos - 1).unwrap();
+        let c = self.source.get(self.pos - 1).unwrap();
 
         match c {
             '\n' => {
@@ -38,20 +36,17 @@ impl LexerInput {
     }
 
     pub fn text(&self, start: usize, end: usize) -> String {
-        self.source[start..end].iter().collect()
+        self.source.text(start, end)
     }
 }
 
-impl From<String> for LexerInput {
-    fn from(string: String) -> Self {
+impl From<SourceFile> for LexerInput {
+    fn from(source: SourceFile) -> Self {
         LexerInput {
-            source: string.chars().collect(),
+            source,
             pos: 0,
             line: 1,
             column: 1,
-            /*
-            lines: string.lines().map(str::to_owned).collect(),
-            */
         }
     }
 }
@@ -62,35 +57,82 @@ pub struct Lexer {
     is_wsep: bool,
 }
 
-pub fn lex_file(filename: &str) -> std::io::Result<Vec<Token>> {
-    let mut buf = Vec::new();
+pub type LexResult<T> = std::result::Result<T, LexError>;
 
-    std::fs::File::open(filename.clone())?.read_to_end(&mut buf)?;
 
-    lex_string(std::str::from_utf8(&buf).unwrap().to_string(), filename)
+pub enum LexError {
+    UnableToFind{the_char:char, starting_from: (usize, usize, usize), source: SourceFile},
+    UnableToReadSource{file: String, message: String},
+    UnableToParseInt{file: String, message: String},
+    DoubleDot{starting_from: (usize, usize, usize), source: SourceFile},
+    SingleDot{starting_from: (usize, usize, usize), source: SourceFile},
+    UnknownLex{ the_char: char, starting_from: (usize, usize, usize), source: SourceFile},
 }
 
-pub fn lex_string(s: String, filename: &str) -> std::io::Result<Vec<Token>> {
-    let mut lexer = Lexer::new(s, filename);
+impl Display for LexError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnableToFind { the_char, starting_from, source } => {
+                f.write_fmt(format_args!("Unexpected end of file while searching for '{}'. search started at {}", the_char, source.pos(*starting_from)))
+            }
+            Self::UnknownLex { the_char, starting_from, source } => {
+                f.write_fmt(format_args!("Unexpected character in source file '{}'. search started at {}", the_char, source.pos(*starting_from)))
+            }
+            Self::DoubleDot { starting_from, source } => {
+                f.write_fmt(format_args!("Unexpected double . character in source. search started at {}", source.pos(*starting_from)))
+            }
+            Self::SingleDot { starting_from, source } => {
+                f.write_fmt(format_args!("Unexpected single . character in source. search started at {}", source.pos(*starting_from)))
+            }
+            Self::UnableToReadSource { file, message } => {
+                f.write_fmt(format_args!("Unable to read the source file '{}': {}", file, message))
+            },
+            Self::UnableToParseInt { file, message } => {
+                f.write_fmt(format_args!("Unable to parse integer literal '{}': {}", file, message))
+            },
+        }
+    }
+}
 
-    Ok(lexer.lex())
+impl std::fmt::Debug for LexError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(self, f)
+    }
+}
+
+impl From<SourceError> for LexError {
+    fn from(err: SourceError) -> Self {
+        LexError::UnableToReadSource {file: "filename not implemented".to_string(), message: err }
+    }
+}
+
+impl From<ParseIntError> for LexError {
+    fn from(err: ParseIntError) -> Self {
+        LexError::UnableToParseInt {file: "filename not implemented".to_string(), message: format!("{}", err) }
+    }
+}
+
+pub fn lex_file(filename: &str) -> LexResult<Vec<Token>> {
+    let source = Source::new_from_path(filename)?;
+    let mut lexer = Lexer::new(source);
+    lexer.lex()
 }
 
 impl Lexer {
-    pub fn new(source: String, _filename: &str) -> Lexer {
+    pub fn new(source: SourceFile) -> Lexer {
         Lexer {
-            source: source.into(),
+            source: LexerInput::from(source),
             is_bol: true,
             is_wsep: false,
         }
     }
 
-    pub fn lex(&mut self) -> Vec<Token> {
+    pub fn lex(&mut self) -> LexResult<Vec<Token>> {
         let mut tokens = Vec::new();
 
         loop {
             let next = self.next();
-            if let Some(t) = next {
+            if let Some(t) = next? {
                 if t.tt == TokenType::EOF {
                     break;
                 }
@@ -98,7 +140,7 @@ impl Lexer {
             }
         }
 
-        tokens
+        Ok(tokens)
     }
 
     fn matches(&mut self, c: char) -> bool {
@@ -116,16 +158,18 @@ impl Lexer {
         false
     }
 
-    fn skip_till_match(&mut self, c: char) -> String {
+    fn skip_till_match(&mut self, c: char) ->LexResult<String> {
+        let start = self.source.pos();
         let mut lexeme = String::new();
         while let Some(ch) = self.source.peek() {
             if ch == c {
-                return lexeme;
+                return Ok(lexeme);
             }
             self.source.next();
             lexeme.push(ch);
         }
-        unimplemented!("unable to find '{}' before EOF", c)
+
+        Err(LexError::UnableToFind{ the_char: c, starting_from: start, source: SourceFile::clone(&self.source.source)}) 
     }
 
     fn skip_while_match_fn(&mut self, value: &mut String, f: fn(char) -> bool) {
@@ -140,9 +184,9 @@ impl Lexer {
         return;
     }
 
-    fn next(&mut self) -> Option<Token> {
+    fn next(&mut self) -> LexResult<Option<Token>> {
         if None == self.source.peek() {
-            return Some(Token::default());
+            return Ok(Some(Token::default()));
         }
 
         let token_start = self.source.pos();
@@ -154,11 +198,11 @@ impl Lexer {
         let token_type = match c {
             ' ' | '\t' | '\r' => {
                 self.is_wsep = true;
-                return None;
+                return Ok(None);
             }
             '\n' => {
                 self.is_bol = true;
-                return None;
+                return Ok(None);
             }
             '{' => TokenType::LBrace,
             '}' => TokenType::RBrace,
@@ -172,32 +216,32 @@ impl Lexer {
             '?' => TokenType::Question,
             '#' => TokenType::Hash,
             '\'' => {
-                let value = self.skip_till_match('\'');
+                let value = self.skip_till_match('\'')?;
                 if self.matches('\'') {
                     TokenType::CharLiteral(value)
                 } else {
-                    unimplemented!("character literal not closed")
+                    unreachable!()
                 }
             }
             '\"' => {
-                let value = self.skip_till_match('\"');
+                let value = self.skip_till_match('\"')?;
                 if self.matches('\"') {
                     TokenType::StringLiteral(value)
                 } else {
-                    unimplemented!("string literal not closed")
+                    unreachable!()
                 }
             }
             '/' => {
                 if self.matches('/') {
                     // comment '//'
-                    self.skip_till_match('\n');
-                    return None;
+                    self.skip_till_match('\n')?;
+                    return Ok(None);
                 }
                 if self.matches('*') {
                     // comment '/*'
                     loop {
                         //TODO: handle EOF while searching for end
-                        self.skip_till_match('*');
+                        self.skip_till_match('*')?;
                         if self.matches('*') {
                             if self.matches('/') {
                                 break;
@@ -206,7 +250,7 @@ impl Lexer {
                             unreachable!()
                         }
                     }
-                    return None;
+                    return Ok(None);
                 }
 
                 if self.matches('=') {
@@ -273,10 +317,10 @@ impl Lexer {
                     if self.matches('.') {
                         TokenType::Elipsis
                     } else {
-                        unimplemented!("double dot");
+                        return Err(LexError::DoubleDot{ starting_from: token_start, source: SourceFile::clone(&self.source.source)});
                     }
                 } else {
-                    unimplemented!("single dot");
+                    return Err(LexError::SingleDot{ starting_from: token_start, source: SourceFile::clone(&self.source.source)});
                 }
             }
             c => {
@@ -285,15 +329,13 @@ impl Lexer {
 
                 if c.is_numeric() {
                     self.skip_while_match_fn(&mut value, char::is_numeric);
-                    let value = value
-                        .parse::<i64>()
-                        .expect("Unable to parse numeric literal");
+                    let value = value.parse::<i64>()?;
                     TokenType::Value(value)
                 } else if Lexer::is_ident(c) {
                     self.skip_while_match_fn(&mut value, Lexer::is_ident);
                     value.into()
                 } else {
-                    unimplemented!("unable to lex '{}'", c);
+                    return Err(LexError::UnknownLex{ the_char: c, starting_from: token_start, source: SourceFile::clone(&self.source.source)});
                 }
             }
         };
@@ -303,7 +345,7 @@ impl Lexer {
 
         let token_end = self.source.pos();
 
-        return Some(Token {
+        return Ok(Some(Token {
             tt: token_type,
             token_start,
             token_end,
@@ -311,7 +353,8 @@ impl Lexer {
             is_wsep,
             token_text: self.source.text(token_start.2, token_end.2),
             hideset: Default::default(),
-        });
+            source: Some(SourceFile::clone(&self.source.source)),
+        }));
     }
 }
 
@@ -325,22 +368,24 @@ fn char() {
 }
 
 #[test]
-fn test_lexer() {
-    let mut lexer = Lexer::new("Hello World".to_owned(), "-");
+fn test_lexer() -> LexResult<()>{
+    let mut lexer = Lexer::new(Source::new_from_string("Hello World", "-"));
 
-    let tokens: Vec<_> = lexer.lex();
+    let tokens: Vec<_> = lexer.lex()?;
 
     assert_eq!(tokens.len(), 2);
 
     assert_eq!(tokens[0].tt, TokenType::Identifier("Hello".to_owned()));
     assert_eq!(tokens[1].tt, TokenType::Identifier("World".to_owned()));
+
+    Ok(())
 }
 
 #[test]
-fn test_lexer_string_literal() {
-    let mut lexer = Lexer::new("\"Hello\\n\\tWorld\"".to_owned(), "-");
+fn test_lexer_string_literal() -> LexResult<()>{
+    let mut lexer = Lexer::new(Source::new_from_string("\"Hello\\n\\tWorld\"", "-"));
 
-    let tokens: Vec<_> = lexer.lex();
+    let tokens: Vec<_> = lexer.lex()?;
 
     assert_eq!(tokens.len(), 1);
 
@@ -349,22 +394,16 @@ fn test_lexer_string_literal() {
         _ => unreachable!(),
     };
     assert_eq!(ident, "Hello\\n\\tWorld");
+
+    Ok(())
 }
 
 #[test]
-fn test_simple() -> std::io::Result<()> {
-    let mut file = std::fs::File::open("examples/01_simple.c")?;
+fn test_simple() -> LexResult<()> {
+    let source = Source::new_from_path("examples/01_simple.c")?;
+    let mut lexer = Lexer::new(source);
 
-    let mut buf = Vec::new();
-
-    std::io::Read::read_to_end(&mut file, &mut buf)?;
-
-    let content = String::from_utf8(buf)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?;
-
-    let mut lexer = Lexer::new(content, "-");
-
-    let tokens: Vec<_> = lexer.lex();
+    let tokens: Vec<_> = lexer.lex()?;
 
     for token in &tokens {
         println!("Token: {:?}", token);

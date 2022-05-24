@@ -9,8 +9,12 @@ mod parser;
 mod platform;
 mod preprocessor;
 mod scope;
+mod source;
 
 use std::io::Write;
+
+use lexer::LexError;
+use source::SourceError;
 
 fn main() -> std::io::Result<()> {
     let mut options = CompilerOptions::default();
@@ -43,7 +47,19 @@ fn main() -> std::io::Result<()> {
         options.filename = arg;
     }
 
-    compile(&options)
+    let result = compile(&options);
+
+    match result {
+        Ok(_) => Ok(()),
+        Err(Error::Lex(l)) => {
+            eprintln!("Lex error: {}", l);
+            Err(std::io::Error::new(std::io::ErrorKind::Other, "Lex error"))
+        },
+        Err(Error::Source(s)) => {
+            eprintln!("Source read error: {}", s);
+            Err(std::io::Error::new(std::io::ErrorKind::Other, "Source read error"))
+        },
+    }
 }
 
 #[derive(Debug)]
@@ -69,7 +85,30 @@ impl Default for CompilerOptions {
     }
 }
 
-pub fn compile(compiler_options: &CompilerOptions) -> std::io::Result<()> {
+pub enum Error {
+    Source(SourceError),
+    Lex(LexError),
+}
+
+impl From<SourceError> for Error {
+    fn from(s: SourceError) -> Self {
+        Error::Source(s)
+    }
+}
+
+impl From<LexError> for Error {
+    fn from(l: LexError) -> Self {
+        Error::Lex(l)
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(_: std::io::Error) -> Self {
+        todo!()
+    }
+}
+
+pub fn compile(compiler_options: &CompilerOptions) -> std::result::Result<(), Error> {
     println!("Reading {}", compiler_options.filename);
 
     let pp_input = lexer::lex_file(&compiler_options.filename)?;
@@ -98,7 +137,7 @@ pub fn compile(compiler_options: &CompilerOptions) -> std::io::Result<()> {
             eprintln!("Found while parsing {:?}", &compiler_options);
 
             let error = std::io::Error::new(std::io::ErrorKind::InvalidInput, error);
-            return Err(error);
+            return Err(error.into());
         }
     };
 
@@ -107,7 +146,7 @@ pub fn compile(compiler_options: &CompilerOptions) -> std::io::Result<()> {
         Err(error) => {
             eprintln!("Compilation error {}", error);
             eprintln!("Found while compiling {:?}", &compiler_options);
-            return Err(error);
+            return Err(error.into());
         }
     };
 
@@ -138,7 +177,7 @@ pub fn compile(compiler_options: &CompilerOptions) -> std::io::Result<()> {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
             format!("Assembler exited with error {}", exit.code().unwrap_or(-1)),
-        ));
+        ).into());
     }
 
     println!("Assembled to {}", compiler_options.output_filename);

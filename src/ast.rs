@@ -1,16 +1,29 @@
 use std::{collections::HashSet, fmt::Display};
 
-use crate::scope::SharedOptionStackLocation;
+use crate::{scope::SharedOptionStackLocation, source::SourceFile};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone)]
 pub struct Token {
     pub tt: TokenType,
-    pub token_start: (usize, usize, usize),
+    pub token_start: (usize, usize, usize), /* line, column, pos */
     pub token_end: (usize, usize, usize),
     pub is_bol: bool,
     pub is_wsep: bool,
     pub token_text: String,
     pub hideset: Option<HashSet<String>>,
+    pub source: Option<SourceFile>,
+}
+
+impl std::fmt::Debug for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Token").field("tt", &self.tt).finish()
+    }
+}
+
+impl std::cmp::PartialEq for Token {
+    fn eq(&self, other: &Self) -> bool {
+        self.tt == other.tt
+    }
 }
 
 impl Default for Token {
@@ -23,6 +36,7 @@ impl Default for Token {
             is_wsep: true,
             token_text: String::new(),
             hideset: Default::default(),
+            source: None,
         }
     }
 }
@@ -37,6 +51,7 @@ impl From<TokenType> for Token {
             is_wsep: true,
             token_text: String::new(),
             hideset: Default::default(),
+            source: None,
         }
     }
 }
