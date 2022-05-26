@@ -56,7 +56,7 @@ fn main() -> std::io::Result<()> {
             Err(std::io::Error::new(std::io::ErrorKind::Other, "Lex error"))
         },
         Err(Error::Source(s)) => {
-            eprintln!("Source read error: {}", s);
+            eprintln!("Source read error: '{}' {}", s.filename, s.message);
             Err(std::io::Error::new(std::io::ErrorKind::Other, "Source read error"))
         },
     }

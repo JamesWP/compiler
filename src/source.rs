@@ -1,4 +1,8 @@
-pub type SourceError = String;
+#[derive(Debug)]
+pub struct SourceError {
+    pub filename: String,
+    pub message: String
+}
 pub type SourceResult = std::result::Result<SourceFile, SourceError>;
 
 pub struct SourceFile(std::rc::Rc<std::boxed::Box<Source>>);
@@ -9,17 +13,19 @@ pub struct Source {
     lines: Vec<String>
 }
 
-fn map_io_error(err:std::io::Error) -> String {
-    err.to_string()
-}
-
 impl Source {
     pub fn new_from_path(filename: &str) -> SourceResult {
         let mut buf = Vec::new();
 
-        let mut open_file = std::fs::File::open(filename.clone()).map_err(map_io_error)?;
+        let mut open_file = std::fs::File::open(filename.clone()).map_err(|err|SourceError {
+            filename: filename.to_string(),
+            message: err.to_string(),
+        })?;
 
-        std::io::Read::read_to_end(&mut open_file, &mut buf).map_err(map_io_error)?;
+        std::io::Read::read_to_end(&mut open_file, &mut buf).map_err(|err|SourceError {
+            filename: filename.to_string(),
+            message: err.to_string(),
+        })?;
 
         let source = std::str::from_utf8(&buf).unwrap();
 
@@ -60,10 +66,10 @@ impl Clone for SourceFile {
 
 #[cfg(test)]
 mod test {
-    use super::{Source, SourceFile};
+    use super::{Source, SourceFile, SourceError};
 
     #[test]
-    fn test_source_basic() -> std::result::Result<(), String> {
+    fn test_source_basic() -> std::result::Result<(), SourceError> {
         let filename = "examples/01_simple.c";
         let s1 = Source::new_from_path(filename)?;
         let s2 = SourceFile::clone(&s1);

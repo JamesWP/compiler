@@ -51,6 +51,12 @@ impl From<SourceFile> for LexerInput {
     }
 }
 
+impl From<SourceError> for LexError {
+    fn from(err: SourceError) -> Self {
+        LexError::UnableToReadSource { source_error:err }
+    }
+}
+
 pub struct Lexer {
     source: LexerInput,
     is_bol: bool,
@@ -59,11 +65,10 @@ pub struct Lexer {
 
 pub type LexResult<T> = std::result::Result<T, LexError>;
 
-
 pub enum LexError {
     UnableToFind{the_char:char, starting_from: (usize, usize, usize), source: SourceFile},
-    UnableToReadSource{file: String, message: String},
-    UnableToParseInt{file: String, message: String},
+    UnableToReadSource{source_error: SourceError},
+    UnableToParseInt{starting_from: (usize, usize, usize), ending_at:(usize, usize, usize), message: String, source: SourceFile},
     DoubleDot{starting_from: (usize, usize, usize), source: SourceFile},
     SingleDot{starting_from: (usize, usize, usize), source: SourceFile},
     UnknownLex{ the_char: char, starting_from: (usize, usize, usize), source: SourceFile},
@@ -84,12 +89,12 @@ impl Display for LexError {
             Self::SingleDot { starting_from, source } => {
                 f.write_fmt(format_args!("Unexpected single . character in source. search started at {}", source.pos(*starting_from)))
             }
-            Self::UnableToReadSource { file, message } => {
-                f.write_fmt(format_args!("Unable to read the source file '{}': {}", file, message))
-            },
-            Self::UnableToParseInt { file, message } => {
-                f.write_fmt(format_args!("Unable to parse integer literal '{}': {}", file, message))
-            },
+            Self::UnableToReadSource { source_error:SourceError{filename, message}} => {
+                f.write_fmt(format_args!("Unable to read the source file '{}': {}", filename, message))
+            }
+            Self::UnableToParseInt { starting_from, message, source , ..} => {
+                f.write_fmt(format_args!("Unable to parse integer literal {}, {}", message, source.pos(*starting_from)))
+            }
         }
     }
 }
@@ -97,18 +102,6 @@ impl Display for LexError {
 impl std::fmt::Debug for LexError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Display::fmt(self, f)
-    }
-}
-
-impl From<SourceError> for LexError {
-    fn from(err: SourceError) -> Self {
-        LexError::UnableToReadSource {file: "filename not implemented".to_string(), message: err }
-    }
-}
-
-impl From<ParseIntError> for LexError {
-    fn from(err: ParseIntError) -> Self {
-        LexError::UnableToParseInt {file: "filename not implemented".to_string(), message: format!("{}", err) }
     }
 }
 
@@ -329,7 +322,9 @@ impl Lexer {
 
                 if c.is_numeric() {
                     self.skip_while_match_fn(&mut value, char::is_numeric);
-                    let value = value.parse::<i64>()?;
+                    let value = value.parse::<i64>().map_err(|e|{
+                        LexError::UnableToParseInt { starting_from: token_start, ending_at: self.source.pos(), message: e.to_string(), source: SourceFile::clone(&self.source.source) }
+                    })?;
                     TokenType::Value(value)
                 } else if Lexer::is_ident(c) {
                     self.skip_while_match_fn(&mut value, Lexer::is_ident);
@@ -407,7 +402,6 @@ fn test_simple() -> LexResult<()> {
 
     for token in &tokens {
         println!("Token: {:?}", token);
-        //println!("    -: {:?} - {:?}", token.0.start, token.0.end);
     }
 
     assert_eq!(tokens.len(), 51);
