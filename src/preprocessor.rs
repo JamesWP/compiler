@@ -1,6 +1,10 @@
 use std::collections::{HashMap, VecDeque};
 
-use crate::{ast, constexpr, parser, lexer::{LexResult, LexError}};
+use crate::{
+    ast, constexpr,
+    lexer::{LexError, LexResult},
+    parser,
+};
 
 struct Input {
     source: VecDeque<ast::Token>,
@@ -834,7 +838,7 @@ impl State {
             (line) => {
                 let mut processed_tokens = self.skip_text_line()?;
                 tokens.append(&mut processed_tokens);
-            }
+            };
         }
 
         loop {
@@ -852,13 +856,15 @@ impl State {
                     } else if let Some(ast::TokenType::Identifier(name)) = self.input.peek_type() {
                         if name == "elif" || name == "endif" {
                             break Ok(tokens);
-                        } 
+                        }
                     }
                 }
-                Some(_) => { }
-                None => { unimplemented!("unable to find end of group"); }
+                Some(_) => {}
+                None => {
+                    unimplemented!("unable to find end of group");
+                }
             };
-            
+
             skip!(line);
         }
     }
@@ -886,7 +892,7 @@ impl State {
             (line) => {
                 let mut processed_tokens = self.skip_text_line()?;
                 tokens.append(&mut processed_tokens);
-            }
+            };
         }
 
         loop {
@@ -904,11 +910,13 @@ impl State {
                         if name == "endif" {
                             skip!(line);
                             break Ok(tokens);
-                        } 
+                        }
                     }
                 }
-                Some(_) => { }
-                None => { unimplemented!("unable to find end of group"); }
+                Some(_) => {}
+                None => {
+                    unimplemented!("unable to find end of group");
+                }
             };
 
             skip!(line);
@@ -920,10 +928,7 @@ impl State {
  * contains the non parsing functions
  */
 impl State {
-    fn new(
-        tokens: Vec<ast::Token>,
-        lex_file: fn(&str) -> LexResult<Vec<ast::Token>>,
-    ) -> Self {
+    fn new(tokens: Vec<ast::Token>, lex_file: fn(&str) -> LexResult<Vec<ast::Token>>) -> Self {
         Self {
             input: tokens.into(),
             output: Default::default(),
@@ -1170,7 +1175,8 @@ mod test {
 
     #[test]
     fn test_conditional() {
-        let tokens = test_preprocessor("
+        let tokens = test_preprocessor(
+            "
             #define DEF 1
             A
             #if DEF
@@ -1180,9 +1186,9 @@ mod test {
               #endif
             #endif
             E
-        ");
+        ",
+        );
 
         token_eq!(tokens, tok!(id A) tok!(id BCD) tok!(id E));
     }
-
 }

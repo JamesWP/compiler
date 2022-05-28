@@ -1,6 +1,9 @@
 use std::{fmt::Display, num::ParseIntError};
 
-use crate::{ast::{Token, TokenType}, source::{SourceFile, Source, SourceError}};
+use crate::{
+    ast::{Token, TokenType},
+    source::{Source, SourceError, SourceFile},
+};
 
 struct LexerInput {
     source: SourceFile,
@@ -53,7 +56,7 @@ impl From<SourceFile> for LexerInput {
 
 impl From<SourceError> for LexError {
     fn from(err: SourceError) -> Self {
-        LexError::UnableToReadSource { source_error:err }
+        LexError::UnableToReadSource { source_error: err }
     }
 }
 
@@ -66,35 +69,86 @@ pub struct Lexer {
 pub type LexResult<T> = std::result::Result<T, LexError>;
 
 pub enum LexError {
-    UnableToFind{the_char:char, starting_from: (usize, usize, usize), source: SourceFile},
-    UnableToReadSource{source_error: SourceError},
-    UnableToParseInt{starting_from: (usize, usize, usize), ending_at:(usize, usize, usize), message: String, source: SourceFile},
-    DoubleDot{starting_from: (usize, usize, usize), source: SourceFile},
-    SingleDot{starting_from: (usize, usize, usize), source: SourceFile},
-    UnknownLex{ the_char: char, starting_from: (usize, usize, usize), source: SourceFile},
+    UnableToFind {
+        the_char: char,
+        starting_from: (usize, usize, usize),
+        source: SourceFile,
+    },
+    UnableToReadSource {
+        source_error: SourceError,
+    },
+    UnableToParseInt {
+        starting_from: (usize, usize, usize),
+        ending_at: (usize, usize, usize),
+        message: String,
+        source: SourceFile,
+    },
+    DoubleDot {
+        starting_from: (usize, usize, usize),
+        source: SourceFile,
+    },
+    SingleDot {
+        starting_from: (usize, usize, usize),
+        source: SourceFile,
+    },
+    UnknownLex {
+        the_char: char,
+        starting_from: (usize, usize, usize),
+        source: SourceFile,
+    },
 }
 
 impl Display for LexError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::UnableToFind { the_char, starting_from, source } => {
-                f.write_fmt(format_args!("Unexpected end of file while searching for '{}'. search started at {}", the_char, source.pos(*starting_from)))
-            }
-            Self::UnknownLex { the_char, starting_from, source } => {
-                f.write_fmt(format_args!("Unexpected character in source file '{}'. search started at {}", the_char, source.pos(*starting_from)))
-            }
-            Self::DoubleDot { starting_from, source } => {
-                f.write_fmt(format_args!("Unexpected double . character in source. search started at {}", source.pos(*starting_from)))
-            }
-            Self::SingleDot { starting_from, source } => {
-                f.write_fmt(format_args!("Unexpected single . character in source. search started at {}", source.pos(*starting_from)))
-            }
-            Self::UnableToReadSource { source_error:SourceError{filename, message}} => {
-                f.write_fmt(format_args!("Unable to read the source file '{}': {}", filename, message))
-            }
-            Self::UnableToParseInt { starting_from, message, source , ..} => {
-                f.write_fmt(format_args!("Unable to parse integer literal {}, {}", message, source.pos(*starting_from)))
-            }
+            Self::UnableToFind {
+                the_char,
+                starting_from,
+                source,
+            } => f.write_fmt(format_args!(
+                "Unexpected end of file while searching for '{}'. search started at {}",
+                the_char,
+                source.pos(*starting_from)
+            )),
+            Self::UnknownLex {
+                the_char,
+                starting_from,
+                source,
+            } => f.write_fmt(format_args!(
+                "Unexpected character in source file '{}'. search started at {}",
+                the_char,
+                source.pos(*starting_from)
+            )),
+            Self::DoubleDot {
+                starting_from,
+                source,
+            } => f.write_fmt(format_args!(
+                "Unexpected double . character in source. search started at {}",
+                source.pos(*starting_from)
+            )),
+            Self::SingleDot {
+                starting_from,
+                source,
+            } => f.write_fmt(format_args!(
+                "Unexpected single . character in source. search started at {}",
+                source.pos(*starting_from)
+            )),
+            Self::UnableToReadSource {
+                source_error: SourceError { filename, message },
+            } => f.write_fmt(format_args!(
+                "Unable to read the source file '{}': {}",
+                filename, message
+            )),
+            Self::UnableToParseInt {
+                starting_from,
+                message,
+                source,
+                ..
+            } => f.write_fmt(format_args!(
+                "Unable to parse integer literal {}, {}",
+                message,
+                source.pos(*starting_from)
+            )),
         }
     }
 }
@@ -151,7 +205,7 @@ impl Lexer {
         false
     }
 
-    fn skip_till_match(&mut self, c: char) ->LexResult<String> {
+    fn skip_till_match(&mut self, c: char) -> LexResult<String> {
         let start = self.source.pos();
         let mut lexeme = String::new();
         while let Some(ch) = self.source.peek() {
@@ -162,7 +216,11 @@ impl Lexer {
             lexeme.push(ch);
         }
 
-        Err(LexError::UnableToFind{ the_char: c, starting_from: start, source: SourceFile::clone(&self.source.source)}) 
+        Err(LexError::UnableToFind {
+            the_char: c,
+            starting_from: start,
+            source: SourceFile::clone(&self.source.source),
+        })
     }
 
     fn skip_while_match_fn(&mut self, value: &mut String, f: fn(char) -> bool) {
@@ -310,10 +368,16 @@ impl Lexer {
                     if self.matches('.') {
                         TokenType::Elipsis
                     } else {
-                        return Err(LexError::DoubleDot{ starting_from: token_start, source: SourceFile::clone(&self.source.source)});
+                        return Err(LexError::DoubleDot {
+                            starting_from: token_start,
+                            source: SourceFile::clone(&self.source.source),
+                        });
                     }
                 } else {
-                    return Err(LexError::SingleDot{ starting_from: token_start, source: SourceFile::clone(&self.source.source)});
+                    return Err(LexError::SingleDot {
+                        starting_from: token_start,
+                        source: SourceFile::clone(&self.source.source),
+                    });
                 }
             }
             c => {
@@ -322,15 +386,24 @@ impl Lexer {
 
                 if c.is_numeric() {
                     self.skip_while_match_fn(&mut value, char::is_numeric);
-                    let value = value.parse::<i64>().map_err(|e|{
-                        LexError::UnableToParseInt { starting_from: token_start, ending_at: self.source.pos(), message: e.to_string(), source: SourceFile::clone(&self.source.source) }
-                    })?;
+                    let value = value
+                        .parse::<i64>()
+                        .map_err(|e| LexError::UnableToParseInt {
+                            starting_from: token_start,
+                            ending_at: self.source.pos(),
+                            message: e.to_string(),
+                            source: SourceFile::clone(&self.source.source),
+                        })?;
                     TokenType::Value(value)
                 } else if Lexer::is_ident(c) {
                     self.skip_while_match_fn(&mut value, Lexer::is_ident);
                     value.into()
                 } else {
-                    return Err(LexError::UnknownLex{ the_char: c, starting_from: token_start, source: SourceFile::clone(&self.source.source)});
+                    return Err(LexError::UnknownLex {
+                        the_char: c,
+                        starting_from: token_start,
+                        source: SourceFile::clone(&self.source.source),
+                    });
                 }
             }
         };
@@ -363,7 +436,7 @@ fn char() {
 }
 
 #[test]
-fn test_lexer() -> LexResult<()>{
+fn test_lexer() -> LexResult<()> {
     let mut lexer = Lexer::new(Source::new_from_string("Hello World", "-"));
 
     let tokens: Vec<_> = lexer.lex()?;
@@ -377,7 +450,7 @@ fn test_lexer() -> LexResult<()>{
 }
 
 #[test]
-fn test_lexer_string_literal() -> LexResult<()>{
+fn test_lexer_string_literal() -> LexResult<()> {
     let mut lexer = Lexer::new(Source::new_from_string("\"Hello\\n\\tWorld\"", "-"));
 
     let tokens: Vec<_> = lexer.lex()?;

@@ -54,11 +54,14 @@ fn main() -> std::io::Result<()> {
         Err(Error::Lex(l)) => {
             eprintln!("Lex error: {}", l);
             Err(std::io::Error::new(std::io::ErrorKind::Other, "Lex error"))
-        },
+        }
         Err(Error::Source(s)) => {
             eprintln!("Source read error: '{}' {}", s.filename, s.message);
-            Err(std::io::Error::new(std::io::ErrorKind::Other, "Source read error"))
-        },
+            Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Source read error",
+            ))
+        }
     }
 }
 
@@ -177,7 +180,8 @@ pub fn compile(compiler_options: &CompilerOptions) -> std::result::Result<(), Er
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
             format!("Assembler exited with error {}", exit.code().unwrap_or(-1)),
-        ).into());
+        )
+        .into());
     }
 
     println!("Assembled to {}", compiler_options.output_filename);
