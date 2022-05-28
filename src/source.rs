@@ -13,6 +13,16 @@ pub struct Source {
     lines: Vec<String>,
 }
 
+mod Colors {
+    pub const RESET:&'static str = "\x1B[0m"; 
+    pub const LINE_NUM:&'static str = "\x1B[0;49;34m"; 
+    pub const CONTEXT:&'static str = "\x1B[0;49;90m"; 
+    pub const SELECTED_LINE:&'static str = "\x1B[1;49;37m"; 
+    pub const HIGHLIGHT:&'static str = "\x1B[7;49;37m"; 
+    pub const SOURCE_LINK:&'static str = "\x1B[0;49;37m"; 
+    pub const SOURCE_LINK_ARROW:&'static str = "\x1B[2;49;95m"; 
+}
+
 impl Source {
     pub fn new_from_path(filename: &str) -> SourceResult {
         let mut buf = Vec::new();
@@ -53,23 +63,45 @@ impl SourceFile {
     }
 
     pub fn pos(&self, p: (usize, usize, usize)) -> String {
+        use Colors::*;
         let context = 5;
 
-        // Maths!
-        let starting_line = p.0 - context;
-        let ending_line = p.0 + context;
+        let obj = self.0.as_ref();
 
-        let lines = &self.0.as_ref().lines;
+        let line_number = p.0 -1;
+        let col_number = p.1 -1;
+
+        // Maths!
+        let starting_line = if context > line_number { 0 } else { p.0 - context };
+        let ending_line = if line_number + context > obj.lines.len() {
+            obj.lines.len()
+        } else {
+            line_number + context
+        };
+
+        let lines = &obj.lines;
         let context = lines[starting_line..ending_line]
             .iter()
             .enumerate()
             .map(|(number, line)| {
                 let number = number + starting_line;
-                format!("{number:3} | {line}")
-            })
-            .collect::<Vec<_>>().join("\n");
+                let line_col = if number == line_number {SELECTED_LINE} else {CONTEXT};
+                let prefix = format!("{LINE_NUM}{:3} ", number+1);
+                let line_content = if number==line_number {
+                    let highlight = HIGHLIGHT;
+                    let (line_before, line_after) = line.split_at(col_number);
+                    let (highlighted, line_after) = if line_after.len() > 1 {line_after.split_at(1)} else {(line_after, "")};
+                    format!("{line_col}| {line_before}{highlight}{highlighted}{RESET}{line_col}{line_after}")
+                } else {
+                    format!("{line_col}| {line}")
+                };
 
-        format!("\n{}\n\n{}:{}:{}", context, self.0.as_ref().filename, p.0, p.1)
+                format!("{prefix}{line_content}")
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        format!("\n{}\n\n{SOURCE_LINK_ARROW}--> {SOURCE_LINK}{}:{}:{}{RESET}", context, obj.filename, p.0, p.1)
     }
 }
 
@@ -98,7 +130,7 @@ mod test {
         let filename = "examples/01_simple.c";
         let s1 = Source::new_from_path(filename)?;
 
-        println!("{}",s1.pos((5,10,0)));
+        println!("{}", s1.pos((2, 9, 0)));
         Ok(())
     }
 }

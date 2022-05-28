@@ -1,4 +1,4 @@
-use std::{fmt::Display, num::ParseIntError};
+use std::fmt::Display;
 
 use crate::{
     ast::{Token, TokenType},
