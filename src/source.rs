@@ -13,14 +13,14 @@ pub struct Source {
     lines: Vec<String>,
 }
 
-mod Colors {
-    pub const RESET:&'static str = "\x1B[0m"; 
-    pub const LINE_NUM:&'static str = "\x1B[0;49;34m"; 
-    pub const CONTEXT:&'static str = "\x1B[0;49;90m"; 
-    pub const SELECTED_LINE:&'static str = "\x1B[1;49;37m"; 
-    pub const HIGHLIGHT:&'static str = "\x1B[7;49;37m"; 
-    pub const SOURCE_LINK:&'static str = "\x1B[0;49;37m"; 
-    pub const SOURCE_LINK_ARROW:&'static str = "\x1B[2;49;95m"; 
+mod colors {
+    pub const RESET: &'static str = "\x1B[0m";
+    pub const LINE_NUM: &'static str = "\x1B[0;49;34m";
+    pub const CONTEXT: &'static str = "\x1B[0;49;90m";
+    pub const SELECTED_LINE: &'static str = "\x1B[1;49;37m";
+    pub const HIGHLIGHT: &'static str = "\x1B[7;49;37m";
+    pub const SOURCE_LINK: &'static str = "\x1B[0;49;37m";
+    pub const SOURCE_LINK_ARROW: &'static str = "\x1B[2;49;95m";
 }
 
 impl Source {
@@ -63,16 +63,20 @@ impl SourceFile {
     }
 
     pub fn pos(&self, p: (usize, usize, usize)) -> String {
-        use Colors::*;
+        use colors::*;
         let context = 5;
 
         let obj = self.0.as_ref();
 
-        let line_number = p.0 -1;
-        let col_number = p.1 -1;
+        let line_number = p.0 - 1;
+        let col_number = p.1 - 1;
 
         // Maths!
-        let starting_line = if context > line_number { 0 } else { p.0 - context };
+        let starting_line = if context > line_number {
+            0
+        } else {
+            p.0 - context
+        };
         let ending_line = if line_number + context > obj.lines.len() {
             obj.lines.len()
         } else {
@@ -101,7 +105,10 @@ impl SourceFile {
             .collect::<Vec<_>>()
             .join("\n");
 
-        format!("\n{}\n\n{SOURCE_LINK_ARROW}--> {SOURCE_LINK}{}:{}:{}{RESET}", context, obj.filename, p.0, p.1)
+        format!(
+            "\n{}\n\n{SOURCE_LINK_ARROW}--> {SOURCE_LINK}{}:{}:{}{RESET}",
+            context, obj.filename, p.0, p.1
+        )
     }
 }
 

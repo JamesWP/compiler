@@ -14,6 +14,7 @@ use std::rc::Rc;
 struct CompilationState {
     output: String,
     function_stack_frame: Option<platform::StackLayout>,
+    stack_depth: i32,
     pub intern: intern::Intern,
     pub labels: labels::LabelAllocator,
     pub debug: bool,
@@ -24,6 +25,7 @@ impl Default for CompilationState {
         CompilationState {
             output: String::new(),
             function_stack_frame: None,
+            stack_depth: 0,
             intern: intern::Intern::new(),
             labels: labels::LabelAllocator::default(),
             debug: false,
@@ -135,6 +137,8 @@ impl CompilationState {
                 continue;
             }
 
+            assert_eq!(self.stack_depth, 0);
+
             let statement = definition.function_body.as_ref().unwrap();
 
             self.output_newline()?;
@@ -145,9 +149,7 @@ impl CompilationState {
             self.output_function_label(name)?;
 
             // set up base pointer for frame
-            // -> Does this need to change if we are not leaf?
-            assemble!(self, "pushq", reg::RBP);
-            assemble!(self, "movq", reg::RSP, reg::RBP);
+            self.push_frame();
 
             // Calculate layout of stack frame
             let mut layout = platform::StackLayout::default();
@@ -192,24 +194,73 @@ impl CompilationState {
 
             self.output_comment(format!("{:?}", &layout))?;
 
-            // Fix stack pointer
-            let stack_size = layout.stack_size;
-            if stack_size != 0 {
-                assemble!(self, "subq", DL::new(stack_size as i32), reg::RSP);
-            }
+            self.setup_stack(layout);
 
-            self.function_stack_frame = Some(layout);
             for statement in statement.iter() {
                 self.compile_statement(statement)?;
             }
 
-            self.function_stack_frame = None;
+            self.reset_stack();
+
+            assert_eq!(self.stack_depth, 0);
         }
 
         Ok(())
     }
 
+    fn setup_stack(&mut self, layout: platform::StackLayout) {
+        // Fix stack pointer
+        let stack_size = layout.stack_size;
+        if stack_size != 0 {
+            assemble!(self, "subq", DL::new(stack_size as i32), reg::RSP);
+        }
+
+        self.stack_depth += stack_size as i32 / 8;
+        self.function_stack_frame = Some(layout);
+    }
+
+    fn reset_stack(&mut self) {
+        assert!(self.function_stack_frame.is_some());
+
+        let stack_size = self.function_stack_frame.as_ref().unwrap().stack_size;
+        self.stack_depth -= stack_size as i32 / 8;
+        self.function_stack_frame = None;
+    }
+
+    fn setup_stack_for_call(&mut self) -> i32 {
+        if self.stack_depth %2 == 1 {
+            // stack is not aligned on 16byte boundary
+            self.push();
+            1 // one push made
+        } else {
+            0 // no push made
+        }
+    }
+
+    fn reset_stack_for_call(&mut self, alignment: i32) {
+       if alignment == 1 {
+           self.pop_discard();
+       } 
+    }
+
+    fn push_frame(&mut self) {
+        // don't count the rbp on the stack which will be poped in each
+        // return statement
+        self.stack_depth -= 1; 
+
+        self.push_reg(reg::RBP);
+        assemble!(self, "movq", reg::RSP, reg::RBP);
+    }
+    fn pop_frame(&mut self) {
+        // don't count the rbp on the stack which will be poped in each
+        // return statement
+        self.stack_depth += 1; 
+
+        self.pop_reg(reg::RBP);
+    }
+
     fn push_reg(&mut self, register: reg) {
+        self.stack_depth += 1;
         match register.size() {
             8 => {
                 assemble!(self, "push", register);
@@ -224,6 +275,7 @@ impl CompilationState {
     }
 
     fn pop_reg(&mut self, register: reg) {
+        self.stack_depth -= 1;
         match register.size() {
             8 => {
                 assemble!(self, "pop", register);
@@ -244,6 +296,7 @@ impl CompilationState {
 
     // implicit 8 bytes
     fn pop_discard(&mut self) {
+        self.stack_depth -= 1;
         assemble!(self, "add", DL::new(8), reg::RSP);
     }
 
@@ -414,7 +467,8 @@ impl CompilationState {
                 }
 
                 // TODO: read information about all registers which need popping
-                self.pop_reg(reg::RBP);
+                self.pop_frame();
+
                 assemble!(self, "ret");
             }
             ast::Statement::DoStatement(loop_body, None) => {
@@ -827,6 +881,8 @@ impl CompilationState {
                     }
                 }
 
+                let call_align = self.setup_stack_for_call();
+
                 // assemble call instruction
                 self.compile_expression(lhs.as_ref())?;
 
@@ -838,6 +894,8 @@ impl CompilationState {
                 } else {
                     assemble!(self, "call", format!("*{}", reg::RAX));
                 }
+
+                self.reset_stack_for_call(call_align);
             }
         }
         Ok(())
